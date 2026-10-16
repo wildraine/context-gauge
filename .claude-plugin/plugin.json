@@ -1,0 +1,9 @@
+{
+  "name": "context-gauge",
+  "version": "0.1.0",
+  "description": "Shows the session's context window usage above the prompt",
+  "author": {
+    "name": "WildRain"
+  },
+  "types": "./types/index.d.ts"
+}
