@@ -57,16 +57,18 @@ for (const surface of SURFACES) {
     expect(label?.props.color).toBe('green')
   })
 
-  test(`${surface}: 80% 이상이면 빨간색`, async ($, on) => {
-    echoMeasure(on)
-    engineBand(on)
-    await measure($, 170_000, 200_000, 85)
-    const ui = await $.ui.mount({ plugin: PLUGIN, surface, component: 'AbovePrompt', props: BAND })
+  for (const [percent, color] of [[49, 'green'], [50, 'yellow'], [60, '#ff8700'], [70, 'red']] as const) {
+    test(`${surface}: ${percent}%는 ${color}`, async ($, on) => {
+      echoMeasure(on)
+      engineBand(on)
+      await measure($, percent * 2_000, 200_000, percent)
+      const ui = await $.ui.mount({ plugin: PLUGIN, surface, component: 'AbovePrompt', props: BAND })
 
-    const [filled] = await ui.findAll({ type: 'Text' })
-    expect(filled?.text).toBe('█'.repeat(17))
-    expect(filled?.props.color).toBe('red')
-  })
+      const [filled, , label] = await ui.findAll({ type: 'Text' })
+      expect(filled?.props.color).toBe(color)
+      expect(label?.props.color).toBe(color)
+    })
+  }
 
   test(`${surface}: 설문이 떠 있으면 양보한다`, async ($, on) => {
     echoMeasure(on)

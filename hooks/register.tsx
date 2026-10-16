@@ -4,8 +4,10 @@ import type { Register, SessionContextUsage } from 'claude-code'
 
 import type { ContextFill } from '../types'
 
+const CAUTION_PERCENT = 50
 const WARN_PERCENT = 60
-const DANGER_PERCENT = 80
+const DANGER_PERCENT = 70
+const ORANGE = '#ff8700'
 const TOKENS_PER_K = 1000
 const BAR_CELLS = 20
 const FULL_PERCENT = 100
@@ -19,8 +21,13 @@ const toFill = (context: SessionContextUsage): ContextFill | null =>
     ? null
     : { tokens: context.tokens, window: context.window, percent: context.percent }
 
-const colorOf = (percent: number) =>
-  percent >= DANGER_PERCENT ? 'red' : percent >= WARN_PERCENT ? 'yellow' : 'green'
+const colorOf = (percent: number) => {
+  if (percent >= DANGER_PERCENT) return 'red'
+  if (percent >= WARN_PERCENT) return ORANGE
+  if (percent >= CAUTION_PERCENT) return 'yellow'
+
+  return 'green'
+}
 
 const kilo = (tokens: number) => `${Math.round(tokens / TOKENS_PER_K)}k`
 
