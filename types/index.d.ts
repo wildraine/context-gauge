@@ -10,6 +10,8 @@ declare module 'claude-code' {
       limits: Limit[]
       now: number
       isHidden: boolean
+      handoffSent: boolean
+      handoffTurn: string | null
     }
   }
 }

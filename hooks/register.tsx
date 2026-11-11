@@ -1,10 +1,28 @@
-// 입력창 위에 컨텍스트 사용량과 사용 한도(5h·7d)를 칸(pill)으로 표시하는 mod
+// 입력창 위에 컨텍스트 사용량과 사용 한도(5h·7d)를 칸(pill)으로 표시하고, 설정 시 컨텍스트 80%에서 인수인계 문서 작성을 요청하는 mod
 import { atom, read, update } from 'claude-code'
-import type { Register, RenderChildren, SessionContextUsage, SessionRateLimit, Timer } from 'claude-code'
+import type {
+  EngineInterface,
+  Register,
+  RenderChildren,
+  SessionContextUsage,
+  SessionRateLimit,
+  Timer,
+} from 'claude-code'
 
 import type { ContextFill, Limit } from '../types'
 
 const COMMAND = 'context-gauge'
+
+const HANDOFF_PERCENT = 80
+const HANDOFF_MARK = '[context-gauge handoff]'
+const HANDOFF_PROMPT =
+  `${HANDOFF_MARK} The context window is over ${HANDOFF_PERCENT}% full. ` +
+  'Write a handoff document so a new session can pick up this work: the goal, what is done, ' +
+  'what is in progress, what is left, the decisions made and why, and anything to watch out for. ' +
+  "Follow the project's existing handoff document convention if it has one, and tell me the file path."
+const HANDOFF_DONE = 'Handoff document written. Start a new session or run /clear to free the context.'
+const HANDOFF_STOPPED = 'The handoff document was not finished.'
+const HANDOFF_ASKED = `Context over ${HANDOFF_PERCENT}%: asking Claude for a handoff document.`
 
 const CONTEXT_LEVEL_PERCENTS = [50, 60, 70]
 const LIMIT_LEVEL_PERCENTS = [70, 80, 90]
@@ -57,6 +75,8 @@ const history = atom({ plugin: 'context-gauge', key: 'history' } as const, [])
 const limits = atom({ plugin: 'context-gauge', key: 'limits' } as const, [])
 const now = atom({ plugin: 'context-gauge', key: 'now' } as const, 0)
 const isHidden = atom({ plugin: 'context-gauge', key: 'isHidden' } as const, false)
+const handoffSent = atom({ plugin: 'context-gauge', key: 'handoffSent' } as const, false)
+const handoffTurn = atom({ plugin: 'context-gauge', key: 'handoffTurn' } as const, null)
 
 const toFill = (context: SessionContextUsage): ContextFill | null =>
   context.tokens === undefined || context.percent === undefined
@@ -183,7 +203,21 @@ const detailFor = (pills: Pill[], layout: Layout, columns: number) => {
   return DETAIL_LEVELS - 1
 }
 
-export const register: Register = on => {
+// 80%를 처음 넘으면 한 번 요청하고, 압축·정리로 80% 아래로 내려가면 다시 요청할 수 있게 한다
+const requestHandoff = async ($: EngineInterface, percent: number) => {
+  if (percent < HANDOFF_PERCENT) {
+    await update($, handoffSent, () => false)
+    return
+  }
+  if (await read($, handoffSent)) return
+
+  await update($, handoffSent, () => true)
+  $.ui.toast(HANDOFF_ASKED)
+  void $.prompt.submit({ text: HANDOFF_PROMPT })
+}
+
+export const register: Register = (on, options) => {
+  const isAutoHandoff = options.autoHandoff === true
   let ticker: Timer | undefined
 
   on('session.start', async ($, e, next) => {
@@ -213,6 +247,7 @@ export const register: Register = on => {
       const current = toFill(e.context)
       await update($, fill, () => current)
       if (current !== null) await update($, history, points => pushHistory(points, current.tokens))
+      if (current !== null && isAutoHandoff) await requestHandoff($, current.percent)
     }
     if (e.changed.includes('rateLimits')) {
       await update($, limits, () => toLimits(e.rateLimits))
@@ -223,6 +258,23 @@ export const register: Register = on => {
     ticker ??= $.clock.every(TICK_MS, () => {
       void $.clock.now().then(tick => update($, now, () => tick))
     })
+
+    return next(e)
+  })
+
+  on('turn.start', async ($, e, next) => {
+    if (e.agentId === undefined && e.text.includes(HANDOFF_MARK)) {
+      await update($, handoffTurn, () => e.turnId)
+    }
+
+    return next(e)
+  })
+
+  on('turn.complete', async ($, e, next) => {
+    if (e.turnId === (await read($, handoffTurn))) {
+      await update($, handoffTurn, () => null)
+      await $.ui.notify(e.reason === 'answer' ? HANDOFF_DONE : HANDOFF_STOPPED, { title: 'Context gauge' })
+    }
 
     return next(e)
   })

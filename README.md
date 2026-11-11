@@ -14,6 +14,16 @@ A Claude Code mod that shows the session's usage above the prompt as a row of pi
 - Updates after each response; the reset countdowns also tick every minute.
 - `✕` hides the gauge; `/context-gauge` shows or hides it again.
 
+## Handoff at 80%
+
+Off by default. Turn on **Handoff at 80%** (`autoHandoff`) in the plugin's settings, or under `pluginConfigs` in `settings.json`:
+
+```json
+{ "pluginConfigs": { "context-gauge": { "autoHandoff": true } } }
+```
+
+When the context window first passes 80% after a response, the gauge asks Claude to write a handoff document (following the project's own convention if it has one). When that turn ends it sends a notification suggesting a new session or `/clear`. It asks once; after the context drops below 80% (a compaction or `/clear`) it can ask again. Nothing is compacted or cleared for you.
+
 Requires Claude Code 2.1.299 or newer.
 
 ## Install

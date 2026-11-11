@@ -5,5 +5,13 @@
   "author": {
     "name": "WildRain"
   },
-  "types": "./types/index.d.ts"
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "autoHandoff": {
+      "type": "boolean",
+      "title": "Handoff at 80%",
+      "description": "When the context window first passes 80%, ask Claude to write a handoff document, then notify you to start a new session or /clear.",
+      "default": false
+    }
+  }
 }

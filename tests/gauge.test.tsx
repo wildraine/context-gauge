@@ -360,3 +360,90 @@ for (const surface of SURFACES) {
     }
   })
 }
+
+// 인수인계 요청: 엔진 자리에서 제출된 프롬프트와 알림을 모은다
+const recordHandoff = (on: On) => {
+  const prompts: string[] = []
+  const notices: string[] = []
+  on('prompt.submit', ($, e) => {
+    prompts.push(e.text)
+
+    return { text: e.text }
+  })
+  on('ui.notify', ($, e) => {
+    notices.push(e.text)
+
+    return { value: { isSent: true, channel: 'client' } as const }
+  })
+  on('ui.toast', () => ({ value: undefined }))
+  on('turn.start', ($, e) => ({ turnId: e.turnId }))
+  on('turn.complete', ($, e) => ({ text: e.answer }))
+
+  return { prompts, notices }
+}
+
+const HANDOFF = { options: { autoHandoff: true } }
+
+test('설정이 꺼져 있으면 80%를 넘어도 인수인계를 요청하지 않는다', async ($, on) => {
+  setup(on)
+  const { prompts } = recordHandoff(on)
+  await measure($, 170_000, 85)
+
+  expect(prompts).toHaveLength(0)
+})
+
+test('80%를 처음 넘을 때 한 번만 인수인계를 요청한다', HANDOFF, async ($, on) => {
+  setup(on)
+  const { prompts } = recordHandoff(on)
+  await measure($, 158_000, 79)
+  expect(prompts).toHaveLength(0)
+
+  await measure($, 160_000, 80)
+  await measure($, 170_000, 85)
+
+  expect(prompts).toHaveLength(1)
+  expect(prompts[0]).toContain('[context-gauge handoff]')
+})
+
+test('80% 아래로 내려갔다가 다시 넘으면 다시 요청한다', HANDOFF, async ($, on) => {
+  setup(on)
+  const { prompts } = recordHandoff(on)
+  await measure($, 170_000, 85)
+  await measure($, 60_000, 30)
+  await measure($, 162_000, 81)
+
+  expect(prompts).toHaveLength(2)
+})
+
+test('인수인계 턴이 끝나면 새 세션이나 /clear를 권하는 알림을 보낸다', HANDOFF, async ($, on) => {
+  setup(on)
+  const { prompts, notices } = recordHandoff(on)
+  await measure($, 170_000, 85)
+
+  await $.turn.start({ text: prompts[0] ?? '', turnId: 'handoff' })
+  await $.turn.complete({ answer: 'done', durationMs: 1, isAborted: false, turnId: 'handoff', reason: 'answer' })
+
+  expect(notices).toEqual(['Handoff document written. Start a new session or run /clear to free the context.'])
+})
+
+test('다른 턴이 끝날 때는 알림을 보내지 않는다', HANDOFF, async ($, on) => {
+  setup(on)
+  const { notices } = recordHandoff(on)
+  await measure($, 170_000, 85)
+
+  await $.turn.start({ text: 'something else', turnId: 'other' })
+  await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'other', reason: 'answer' })
+
+  expect(notices).toHaveLength(0)
+})
+
+test('인수인계 턴이 중단되면 끝나지 않았다고 알린다', HANDOFF, async ($, on) => {
+  setup(on)
+  const { prompts, notices } = recordHandoff(on)
+  await measure($, 170_000, 85)
+
+  await $.turn.start({ text: prompts[0] ?? '', turnId: 'handoff' })
+  await $.turn.complete({ answer: '', durationMs: 1, isAborted: true, turnId: 'handoff', reason: 'aborted' })
+
+  expect(notices).toEqual(['The handoff document was not finished.'])
+})
