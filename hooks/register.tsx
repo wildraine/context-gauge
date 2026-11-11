@@ -1,4 +1,4 @@
-// 입력창 위에 컨텍스트 사용량과 사용 한도(5h·7d), 5h 한도 소진 예상 시간을 칸(pill)으로 표시하는 mod
+// 입력창 위에 컨텍스트 사용량과 사용 한도(5h·7d)를 칸(pill)으로 표시하는 mod
 import { atom, read, update } from 'claude-code'
 import type { Register, RenderChildren, SessionContextUsage, SessionRateLimit, Timer } from 'claude-code'
 
@@ -29,7 +29,6 @@ const LIMITS = [
   { kind: 'five_hour', label: '5h', icon: '⏱', windowMs: 5 * HOUR_MS, tint: '#3fa34d' },
   { kind: 'seven_day', label: '7d', icon: '📅', windowMs: 7 * DAY_MS, tint: '#8a6fd1' },
 ] as const
-const BURN_KIND = 'five_hour'
 
 const BAR_CELLS = 8
 const SVG_BAR_WIDTH = 24
@@ -98,20 +97,6 @@ const elapsedPercent = (limit: Limit, windowMs: number, at: number) => {
   const remaining = remainingMs(limit, at)
 
   return remaining === undefined ? 0 : clampPercent(FULL_PERCENT - (remaining / windowMs) * FULL_PERCENT)
-}
-
-// 창 시작부터의 평균 속도로 남은 한도를 다 쓰는 데 걸리는 시간. 리셋 전에 바닥나지 않으면 null
-const exhaustMs = (limit: Limit, windowMs: number, at: number) => {
-  const remaining = remainingMs(limit, at)
-
-  if (remaining === undefined || limit.percentUsed <= 0) return undefined
-
-  const elapsed = windowMs - remaining
-  if (elapsed <= 0) return undefined
-
-  const eta = ((FULL_PERCENT - limit.percentUsed) / limit.percentUsed) * elapsed
-
-  return eta < remaining ? eta : null
 }
 
 const sparkLevels = (points: number[], steps: number) => {
@@ -325,25 +310,7 @@ export const register: Register = on => {
       ]
     })
 
-    const burnStyle = LIMITS.find(style => style.kind === BURN_KIND)
-    const burnLimit = readings.find(reading => reading.kind === BURN_KIND)
-    const eta = burnStyle && burnLimit ? exhaustMs(burnLimit, burnStyle.windowMs, at) : undefined
-    const etaLabel = eta === undefined || eta === null ? '—' : durationLabel(eta)
-    const burnPills: Pill[] =
-      eta === undefined
-        ? []
-        : [
-            {
-              key: 'burn',
-              tint: TINT_BLUE,
-              parts: [
-                part(<Text>⚡</Text>, ICON_CELLS),
-                part(eta === null ? <Text dimColor>{etaLabel}</Text> : <Text bold>{etaLabel}</Text>, etaLabel.length),
-              ],
-            },
-          ]
-
-    const pills = [contextPill, ...limitPills, ...burnPills]
+    const pills = [contextPill, ...limitPills]
     const layout = isTerminal ? TERMINAL_LAYOUT : PANEL_LAYOUT
     const detail = detailFor(pills, layout, e.props.bodyColumns)
     const divider = <Text dimColor>│</Text>

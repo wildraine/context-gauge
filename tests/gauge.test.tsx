@@ -147,7 +147,6 @@ for (const surface of SURFACES) {
 
     expect(await ui.find({ key: 'five_hour' })).toBeUndefined()
     expect(await ui.find({ key: 'seven_day' })).toBeUndefined()
-    expect(await ui.find({ key: 'burn' })).toBeUndefined()
   })
 
   test(`${surface}: 1분마다 남은 시간을 갱신한다`, async ($, on) => {
@@ -159,25 +158,6 @@ for (const surface of SURFACES) {
     await ui.redraw()
 
     expect(await ui.find({ type: 'Text', text: '↺ 2h10' })).toBeDefined()
-  })
-
-  test(`${surface}: 리셋 전에 바닥날 속도면 소진 예상 시간을 표시한다`, async ($, on) => {
-    setup(on)
-    // 3시간 동안 80%를 썼다: 남은 20%는 45분 뒤 소진, 리셋은 2시간 뒤
-    await measure($, 84_000, 42, [limit('five_hour', 80, 2 * HOUR)])
-    const ui = await mount($)
-
-    expect(await ui.find({ key: 'burn' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: '45m' })).toBeDefined()
-  })
-
-  test(`${surface}: 리셋 전에 바닥나지 않을 속도면 소진 예상 시간 대신 —를 표시한다`, async ($, on) => {
-    setup(on)
-    await measure($, 84_000, 42, [FIVE_HOUR])
-    const ui = await mount($)
-
-    expect(await ui.find({ key: 'burn' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: '—' })).toBeDefined()
   })
 
   test(`${surface}: 설문이 떠 있으면 양보한다`, async ($, on) => {
@@ -249,13 +229,14 @@ test('desktop: 칸을 둥근 테두리로, 막대와 스파크라인을 SVG로 �
   expect(await ui.find({ text: /█/ })).toBeUndefined()
 })
 
-// 터미널 폭 계산 기준(▲ +713, 5h·7d, ⚡ —): 전체 96칸, 스파크라인·증감 제외 82칸, 막대·컨텍스트 % 제외 60칸, 리셋 제외 41칸
+// 터미널 폭 계산 기준(▲ +713, 5h·7d): 전체 90칸, 스파크라인·증감 제외 76칸, 막대·컨텍스트 % 제외 54칸, 리셋 제외 35칸
 const RESPONSIVE = [
-  { columns: 96, shown: ['▲ +713', '███', '↺ 2h12'], hidden: [] },
-  { columns: 90, shown: ['███', '↺ 2h12', '50%'], hidden: ['▲ +713'] },
-  { columns: 70, shown: ['↺ 2h12', '38%'], hidden: ['▲ +713', '███', '50%'] },
-  { columns: 50, shown: ['38%', '33%', '—'], hidden: ['↺ 2h12', '███'] },
-  { columns: 30, shown: ['237k', '38%', '33%', '—'], hidden: ['↺ 2h12'] },
+  { columns: 90, shown: ['▲ +713', '███', '↺ 2h12'], hidden: [] },
+  { columns: 89, shown: ['███'], hidden: ['▲ +713'] },
+  { columns: 84, shown: ['███', '↺ 2h12', '50%'], hidden: ['▲ +713'] },
+  { columns: 64, shown: ['↺ 2h12', '38%'], hidden: ['▲ +713', '███', '50%'] },
+  { columns: 44, shown: ['38%', '33%'], hidden: ['↺ 2h12', '███'] },
+  { columns: 30, shown: ['237k', '38%', '33%'], hidden: ['↺ 2h12'] },
 ] as const
 
 for (const { columns, shown, hidden } of RESPONSIVE) {
@@ -292,3 +273,4 @@ test('desktop: 칸의 위아래 여백을 두지 않는다', async ($, on) => {
 
   expect((await ui.find({ key: 'context' }))?.props.paddingY).toBe(0)
 })
+
