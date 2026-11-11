@@ -32,7 +32,7 @@ const LIMITS = [
 const BURN_KIND = 'five_hour'
 
 const BAR_CELLS = 8
-const SVG_BAR_WIDTH = 48
+const SVG_BAR_WIDTH = 24
 const SVG_BAR_HEIGHT = 8
 const SVG_SPARK_STEP = 5
 const SVG_SPARK_BAR = 3
@@ -41,6 +41,16 @@ const SVG_SPARK_MIN = 2
 const SVG_TRACK = '#8888884d'
 const SVG_HATCH = '#8888998c'
 const SVG_SPARK = '#888888'
+
+// 폭이 모자랄 때 항목을 빼는 단계: 값이 작을수록 먼저 빠진다
+const DROP = { spark: 1, delta: 1, bar: 2, contextPercent: 2, reset: 3 } as const
+const DETAIL_LEVELS = 4
+const CELL_PX = 8
+const ICON_CELLS = 2
+const DIVIDER_CELLS = 1
+const CLOSE_CELLS = 4
+const TERMINAL_LAYOUT = { innerGap: 1, outerGap: 2, paddingX: 0, frameCells: 0 }
+const PANEL_LAYOUT = { innerGap: 1, outerGap: 1, paddingX: 1, frameCells: 4 }
 
 const fill = atom({ plugin: 'context-gauge', key: 'fill' } as const, null)
 const history = atom({ plugin: 'context-gauge', key: 'history' } as const, [])
@@ -154,6 +164,39 @@ const barCells = (used: number, elapsed: number) => {
   return { filled, hatched, empty: BAR_CELLS - filled - hatched }
 }
 
+type Part = { node: RenderChildren; cells: number; dropAt: number; hasDivider: boolean }
+type Pill = { key: string; tint: string; parts: Part[] }
+type Layout = { innerGap: number; outerGap: number; paddingX: number; frameCells: number }
+
+const part = (node: RenderChildren, cells: number, dropAt = DETAIL_LEVELS, hasDivider = false): Part => ({
+  node,
+  cells,
+  dropAt,
+  hasDivider,
+})
+
+const visibleParts = (pill: Pill, detail: number) => pill.parts.filter(({ dropAt }) => detail < dropAt)
+
+const pillCells = (pill: Pill, detail: number, layout: Layout) => {
+  const parts = visibleParts(pill, detail)
+  const children = parts.length + parts.filter(({ hasDivider }) => hasDivider).length
+  const content = parts.reduce((sum, { cells, hasDivider }) => sum + cells + (hasDivider ? DIVIDER_CELLS : 0), 0)
+
+  return layout.frameCells + content + Math.max(0, children - 1) * layout.innerGap
+}
+
+const rowCells = (pills: Pill[], detail: number, layout: Layout) =>
+  pills.reduce((sum, pill) => sum + pillCells(pill, detail, layout), 0) + pills.length * layout.outerGap + CLOSE_CELLS
+
+// 한 줄에 들어가는 가장 자세한 단계: 폭이 모자라면 덜 중요한 항목부터 뺀다
+const detailFor = (pills: Pill[], layout: Layout, columns: number) => {
+  for (let detail = 0; detail < DETAIL_LEVELS; detail += 1) {
+    if (rowCells(pills, detail, layout) <= columns) return detail
+  }
+
+  return DETAIL_LEVELS - 1
+}
+
 export const register: Register = on => {
   let ticker: Timer | undefined
 
@@ -211,44 +254,33 @@ export const register: Register = on => {
     const isTerminal = e.surface === 'terminal'
     const { Box, Button, Text } = $.ui.resolve(e)
     const Svg = e.surface === 'terminal' ? undefined : $.ui.resolve(e).Svg
-
-    const divider = <Text dimColor>│</Text>
-    const pill = (key: string, tint: string, children: RenderChildren[]) =>
-      isTerminal ? (
-        <Box key={key} flexDirection="row" alignItems="center" gap={1}>
-          {children}
-        </Box>
-      ) : (
-        <Box
-          key={key}
-          flexDirection="row"
-          alignItems="center"
-          gap="sm"
-          paddingX="sm"
-          borderStyle="round"
-          borderColor={`${tint}${BORDER_ALPHA}`}
-          backgroundColor={`${tint}${BACKGROUND_ALPHA}`}
-        >
-          {children}
-        </Box>
-      )
+    const svgCells = (px: number) => Math.ceil(px / CELL_PX)
 
     const color = colorOf(current.percent)
     const delta = points.length > 1 ? (points.at(-1) ?? 0) - (points.at(-2) ?? 0) : undefined
-    const contextPill = pill('context', TINT_BLUE, [
-      <Text color={color}>{LEVEL_ICONS[levelOf(current.percent)]}</Text>,
-      <Text bold>{tokensLabel(current.tokens)}</Text>,
-      <Text color={color}>{current.percent}%</Text>,
-      divider,
-      Svg === undefined ? (
-        <Text dimColor>{sparkText(points)}</Text>
-      ) : (
-        <Svg source={sparkSvg(points)} alt="Context history" width={points.length * SVG_SPARK_STEP} height={SVG_SPARK_HEIGHT} />
-      ),
-      ...(delta === undefined ? [] : [divider, <Text dimColor>{deltaLabel(delta)}</Text>]),
-    ])
+    const contextLabel = tokensLabel(current.tokens)
+    const contextPill: Pill = {
+      key: 'context',
+      tint: TINT_BLUE,
+      parts: [
+        part(<Text color={color}>{LEVEL_ICONS[levelOf(current.percent)]}</Text>, ICON_CELLS),
+        part(<Text bold>{contextLabel}</Text>, contextLabel.length),
+        part(<Text color={color}>{current.percent}%</Text>, `${current.percent}%`.length, DROP.contextPercent),
+        Svg === undefined
+          ? part(<Text dimColor>{sparkText(points)}</Text>, points.length, DROP.spark, true)
+          : part(
+              <Svg source={sparkSvg(points)} alt="Context history" width={points.length * SVG_SPARK_STEP} height={SVG_SPARK_HEIGHT} />,
+              svgCells(points.length * SVG_SPARK_STEP),
+              DROP.spark,
+              true,
+            ),
+        ...(delta === undefined
+          ? []
+          : [part(<Text dimColor>{deltaLabel(delta)}</Text>, deltaLabel(delta).length, DROP.delta, true)]),
+      ],
+    }
 
-    const limitPills = LIMITS.flatMap(style => {
+    const limitPills = LIMITS.flatMap((style): Pill[] => {
       const limit = readings.find(reading => reading.kind === style.kind)
       if (limit === undefined) return []
 
@@ -257,45 +289,94 @@ export const register: Register = on => {
       const barColor = colorOf(used)
       const remaining = remainingMs(limit, at)
       const cells = barCells(used, elapsed)
-      const bar = Svg === undefined ? (
-        <Box flexDirection="row">
-          <Text color={barColor}>{'█'.repeat(cells.filled)}</Text>
-          <Text dimColor>{'▒'.repeat(cells.hatched)}</Text>
-          <Text dimColor>{'░'.repeat(cells.empty)}</Text>
-        </Box>
-      ) : (
-        <Svg source={barSvg(used, elapsed, barColor)} alt={`${style.label} ${used}%`} width={SVG_BAR_WIDTH} height={SVG_BAR_HEIGHT} />
-      )
+      const bar =
+        Svg === undefined
+          ? part(
+              <Box flexDirection="row">
+                <Text color={barColor}>{'█'.repeat(cells.filled)}</Text>
+                <Text dimColor>{'▒'.repeat(cells.hatched)}</Text>
+                <Text dimColor>{'░'.repeat(cells.empty)}</Text>
+              </Box>,
+              BAR_CELLS,
+              DROP.bar,
+            )
+          : part(
+              <Svg source={barSvg(used, elapsed, barColor)} alt={`${style.label} ${used}%`} width={SVG_BAR_WIDTH} height={SVG_BAR_HEIGHT} />,
+              svgCells(SVG_BAR_WIDTH),
+              DROP.bar,
+            )
+      const usedLabel = `${Math.round(used)}%`
+      const resetLabel = remaining === undefined ? undefined : `↺ ${durationLabel(remaining)}`
 
       return [
-        pill(style.kind, style.tint, [
-          <Text>{style.icon}</Text>,
-          <Text>{style.label}</Text>,
-          bar,
-          <Text bold>{Math.round(used)}%</Text>,
-          ...(remaining === undefined ? [] : [divider, <Text dimColor>↺ {durationLabel(remaining)}</Text>]),
-        ]),
+        {
+          key: style.kind,
+          tint: style.tint,
+          parts: [
+            part(<Text>{style.icon}</Text>, ICON_CELLS),
+            part(<Text>{style.label}</Text>, style.label.length),
+            bar,
+            part(<Text bold>{usedLabel}</Text>, usedLabel.length),
+            ...(resetLabel === undefined
+              ? []
+              : [part(<Text dimColor>{resetLabel}</Text>, resetLabel.length, DROP.reset, true)]),
+          ],
+        },
       ]
     })
 
     const burnStyle = LIMITS.find(style => style.kind === BURN_KIND)
     const burnLimit = readings.find(reading => reading.kind === BURN_KIND)
     const eta = burnStyle && burnLimit ? exhaustMs(burnLimit, burnStyle.windowMs, at) : undefined
-    const burnPills =
+    const etaLabel = eta === undefined || eta === null ? '—' : durationLabel(eta)
+    const burnPills: Pill[] =
       eta === undefined
         ? []
         : [
-            pill('burn', TINT_BLUE, [
-              <Text>⚡</Text>,
-              eta === null ? <Text dimColor>—</Text> : <Text bold>{durationLabel(eta)}</Text>,
-            ]),
+            {
+              key: 'burn',
+              tint: TINT_BLUE,
+              parts: [
+                part(<Text>⚡</Text>, ICON_CELLS),
+                part(eta === null ? <Text dimColor>{etaLabel}</Text> : <Text bold>{etaLabel}</Text>, etaLabel.length),
+              ],
+            },
           ]
 
+    const pills = [contextPill, ...limitPills, ...burnPills]
+    const layout = isTerminal ? TERMINAL_LAYOUT : PANEL_LAYOUT
+    const detail = detailFor(pills, layout, e.props.bodyColumns)
+    const divider = <Text dimColor>│</Text>
+    const drawPill = (pill: Pill) => {
+      const children = visibleParts(pill, detail).flatMap(({ node, hasDivider }) =>
+        hasDivider ? [divider, node] : [node],
+      )
+
+      return isTerminal ? (
+        <Box key={pill.key} flexDirection="row" alignItems="center" flexShrink={0} gap={layout.innerGap}>
+          {children}
+        </Box>
+      ) : (
+        <Box
+          key={pill.key}
+          flexDirection="row"
+          alignItems="center"
+          flexShrink={0}
+          gap={layout.innerGap}
+          paddingX={layout.paddingX}
+          paddingY={0}
+          borderStyle="round"
+          borderColor={`${pill.tint}${BORDER_ALPHA}`}
+          backgroundColor={`${pill.tint}${BACKGROUND_ALPHA}`}
+        >
+          {children}
+        </Box>
+      )
+    }
+
     return (
-      <Box flexDirection="row" alignItems="center" flexWrap="wrap" gap={isTerminal ? 2 : 'sm'}>
-        {contextPill}
-        {limitPills}
-        {burnPills}
+      <Box flexDirection="row" alignItems="center" flexWrap="nowrap" overflow="hidden" gap={layout.outerGap}>
+        {pills.map(drawPill)}
         <Button key="close" label="✕" onPress={() => update($, isHidden, () => true)} />
       </Box>
     )

@@ -10,6 +10,7 @@ A Claude Code mod that shows the session's usage above the prompt as a row of pi
 - **5h / 7d**: how much of each rate-limit window is used and how long until it resets. The hatched part (`▒`) is how much of the window's time has passed: usage ahead of it means you are spending faster than an even pace.
 - **⚡**: at the average pace since the 5h window started, how long until the 5h limit runs out; `—` when it will not run out before the reset.
 - The rate-limit pills appear only when the API reports rate limits (subscription plans).
+- The pills and `✕` stay on one line. When the line is too narrow, details drop in this order: sparkline and change, then the bars and context percent, then the reset times.
 - In the terminal the pills are text; in the desktop app, VS Code and mobile they are rounded boxes with SVG bars.
 - Updates after each response; the reset countdowns also tick every minute.
 - `✕` hides the gauge; `/context-gauge` shows or hides it again.

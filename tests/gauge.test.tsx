@@ -10,7 +10,7 @@ const BAND = {
   isCollapsed: false,
   isWorking: false,
   maxRows: 10,
-  bodyColumns: 120,
+  bodyColumns: 200,
   scroll: { offset: 0, bodyRows: 9 },
   view: {},
 }
@@ -247,4 +247,48 @@ test('desktop: 칸을 둥근 테두리로, 막대와 스파크라인을 SVG로 �
   expect(bar?.props.source).toContain('fill="url(#h)"')
   expect(bar?.props.source).toContain('fill="green"')
   expect(await ui.find({ text: /█/ })).toBeUndefined()
+})
+
+// 터미널 폭 계산 기준(▲ +713, 5h·7d, ⚡ —): 전체 96칸, 스파크라인·증감 제외 82칸, 막대·컨텍스트 % 제외 60칸, 리셋 제외 41칸
+const RESPONSIVE = [
+  { columns: 96, shown: ['▲ +713', '███', '↺ 2h12'], hidden: [] },
+  { columns: 90, shown: ['███', '↺ 2h12', '50%'], hidden: ['▲ +713'] },
+  { columns: 70, shown: ['↺ 2h12', '38%'], hidden: ['▲ +713', '███', '50%'] },
+  { columns: 50, shown: ['38%', '33%', '—'], hidden: ['↺ 2h12', '███'] },
+  { columns: 30, shown: ['237k', '38%', '33%', '—'], hidden: ['↺ 2h12'] },
+] as const
+
+for (const { columns, shown, hidden } of RESPONSIVE) {
+  test(`terminal: ${columns}칸이면 덜 중요한 항목부터 빼고 한 줄로 그린다`, async ($, on) => {
+    setup(on)
+    await measure($, 236_287, 50)
+    await measure($, 237_000, 50, [FIVE_HOUR, SEVEN_DAY])
+    const ui = await $.ui.mount({
+      plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: { ...BAND, bodyColumns: columns },
+    })
+
+    for (const text of shown) expect(await ui.find({ type: 'Text', text })).toBeDefined()
+    for (const text of hidden) expect(await ui.find({ type: 'Text', text })).toBeUndefined()
+    expect(await ui.find({ type: 'Button', key: 'close' })).toBeDefined()
+  })
+}
+
+for (const surface of SURFACES) {
+  test(`${surface}: 칸과 닫기 버튼을 줄바꿈 없이 한 줄에 둔다`, async ($, on) => {
+    setup(on)
+    await measure($, 84_000, 42, [FIVE_HOUR, SEVEN_DAY])
+    const ui = await $.ui.mount({ plugin: PLUGIN, surface, component: 'AbovePrompt', props: { ...BAND, bodyColumns: 40 } })
+
+    const row = (await ui.findAll({ type: 'Box' })).find(box => box.props.flexWrap !== undefined)
+    expect(row?.props.flexWrap).toBe('nowrap')
+    expect(row?.props.flexDirection).toBe('row')
+  })
+}
+
+test('desktop: 칸의 위아래 여백을 두지 않는다', async ($, on) => {
+  setup(on)
+  await measure($, 84_000, 42)
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'desktop', component: 'AbovePrompt', props: BAND })
+
+  expect((await ui.find({ key: 'context' }))?.props.paddingY).toBe(0)
 })
