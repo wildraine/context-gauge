@@ -6,7 +6,8 @@ import type { ContextFill, Limit } from '../types'
 
 const COMMAND = 'context-gauge'
 
-const LEVEL_PERCENTS = [50, 60, 70]
+const CONTEXT_LEVEL_PERCENTS = [50, 60, 70]
+const LIMIT_LEVEL_PERCENTS = [70, 80, 90]
 const LEVEL_COLORS = ['green', 'yellow', '#ff8700', 'red']
 const LEVEL_ICONS = ['☀', '⛅', '☁', '⛈']
 const FULL_PERCENT = 100
@@ -68,9 +69,9 @@ const toLimits = (rateLimits: SessionRateLimit[]): Limit[] =>
 const pushHistory = (points: number[], tokens: number) =>
   points.at(-1) === tokens ? points : [...points, tokens].slice(-HISTORY_POINTS)
 
-const levelOf = (percent: number) => LEVEL_PERCENTS.filter(threshold => percent >= threshold).length
+const levelOf = (percent: number, thresholds: readonly number[]) => thresholds.filter(threshold => percent >= threshold).length
 
-const colorOf = (percent: number) => LEVEL_COLORS[levelOf(percent)] ?? 'red'
+const colorOf = (percent: number, thresholds: readonly number[]) => LEVEL_COLORS[levelOf(percent, thresholds)] ?? 'red'
 
 const tokensLabel = (tokens: number) =>
   Math.abs(tokens) < TOKENS_PER_K ? `${tokens}` : `${Math.round(tokens / TOKENS_PER_K)}k`
@@ -242,14 +243,14 @@ export const register: Register = on => {
     const svgCells = (px: number) => Math.ceil(px / CELL_PX)
     const layout = isTerminal ? TERMINAL_LAYOUT : PANEL_LAYOUT
 
-    const color = colorOf(current.percent)
+    const color = colorOf(current.percent, CONTEXT_LEVEL_PERCENTS)
     const delta = points.length > 1 ? (points.at(-1) ?? 0) - (points.at(-2) ?? 0) : undefined
     const contextLabel = tokensLabel(current.tokens)
     const contextPill: Pill = {
       key: 'context',
       tint: TINT_BLUE,
       parts: [
-        part(<Text color={color}>{LEVEL_ICONS[levelOf(current.percent)]}</Text>, layout.iconCells),
+        part(<Text color={color}>{LEVEL_ICONS[levelOf(current.percent, CONTEXT_LEVEL_PERCENTS)]}</Text>, layout.iconCells),
         part(<Text bold>{contextLabel}</Text>, contextLabel.length, DROP.contextTokens),
         part(<Text color={color}>{current.percent}%</Text>, `${current.percent}%`.length),
         Svg === undefined
@@ -273,7 +274,7 @@ export const register: Register = on => {
 
       const used = limit.percentUsed
       const elapsed = elapsedPercent(limit, style.windowMs, at)
-      const barColor = colorOf(used)
+      const usedColor = colorOf(used, LIMIT_LEVEL_PERCENTS)
       const remaining = remainingMs(limit, at)
       const barTotal = BAR_CELLS + growCells
       const barWidth = SVG_BAR_WIDTH + growCells * CELL_PX
@@ -282,7 +283,7 @@ export const register: Register = on => {
         Svg === undefined
           ? part(
               <Box flexDirection="row">
-                <Text color={barColor}>{'█'.repeat(cells.filled)}</Text>
+                <Text color={usedColor}>{'█'.repeat(cells.filled)}</Text>
                 <Text dimColor>{'▒'.repeat(cells.hatched)}</Text>
                 <Text dimColor>{'░'.repeat(cells.empty)}</Text>
               </Box>,
@@ -290,7 +291,7 @@ export const register: Register = on => {
               DROP.bar,
             )
           : part(
-              <Svg source={barSvg(used, elapsed, barColor, barWidth)} alt={`${style.label} ${used}%`} width={barWidth} height={SVG_BAR_HEIGHT} />,
+              <Svg source={barSvg(used, elapsed, usedColor, barWidth)} alt={`${style.label} ${used}%`} width={barWidth} height={SVG_BAR_HEIGHT} />,
               svgCells(barWidth),
               DROP.bar,
             )
@@ -305,7 +306,7 @@ export const register: Register = on => {
             part(<Text>{style.icon}</Text>, layout.iconCells),
             part(<Text>{style.label}</Text>, style.label.length),
             bar,
-            part(<Text bold>{usedLabel}</Text>, usedLabel.length),
+            part(<Text bold color={usedColor}>{usedLabel}</Text>, usedLabel.length),
             ...(resetLabel === undefined
               ? []
               : [part(<Text dimColor>{resetLabel}</Text>, resetLabel.length, DROP.reset, true)]),

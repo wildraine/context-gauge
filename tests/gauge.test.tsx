@@ -127,6 +127,30 @@ for (const surface of SURFACES) {
     expect(await ui.find({ type: 'Text', text: /[▲▼]/ })).toBeUndefined()
   })
 
+  for (const [percent, color] of [
+    [69, 'green'],
+    [70, 'yellow'],
+    [80, '#ff8700'],
+    [90, 'red'],
+  ] as const) {
+    test(`${surface}: 한도 ${percent}%는 숫자와 막대가 ${color}`, async ($, on) => {
+      setup(on)
+      await measure($, 84_000, 42, [limit('five_hour', percent, 2 * HOUR), limit('seven_day', percent, DAY)])
+      const ui = await mount($)
+
+      const labels = (await ui.findAll({ type: 'Text' })).filter(node => node.text === `${percent}%`)
+      expect(labels).toHaveLength(2)
+      for (const label of labels) expect(label.props.color).toBe(color)
+      if (surface === 'desktop') {
+        const bar = (await ui.findAll({ type: 'Svg' })).find(svg => svg.props.alt === `5h ${percent}%`)
+        expect(bar?.props.source).toContain(`fill="${color}"`)
+      } else {
+        const filled = (await ui.findAll({ type: 'Text' })).find(node => node.text.startsWith('█'))
+        expect(filled?.props.color).toBe(color)
+      }
+    })
+  }
+
   test(`${surface}: 5h·7d 한도와 리셋까지 남은 시간을 표시한다`, async ($, on) => {
     setup(on)
     await measure($, 84_000, 42, [FIVE_HOUR, SEVEN_DAY])
