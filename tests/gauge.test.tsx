@@ -274,3 +274,18 @@ test('desktop: 칸의 위아래 여백을 두지 않는다', async ($, on) => {
   expect((await ui.find({ key: 'context' }))?.props.paddingY).toBe(0)
 })
 
+// 데스크톱 폭 계산 기준(▲ +713, 5h·7d): 전체 80칸, 스파크라인·증감 제외 67칸. 앱에서 실측한 밴드 폭은 85칸
+for (const { columns, isFull } of [{ columns: 85, isFull: true }, { columns: 79, isFull: false }] as const) {
+  test(`desktop: ${columns}칸이면 스파크라인과 증감을 ${isFull ? '그린다' : '뺀다'}`, async ($, on) => {
+    setup(on)
+    await measure($, 236_287, 50)
+    await measure($, 237_000, 50, [FIVE_HOUR, SEVEN_DAY])
+    const ui = await $.ui.mount({
+      plugin: PLUGIN, surface: 'desktop', component: 'AbovePrompt', props: { ...BAND, bodyColumns: columns },
+    })
+
+    const spark = (await ui.findAll({ type: 'Svg' })).find(svg => svg.props.alt === 'Context history')
+    expect(spark !== undefined).toBe(isFull)
+    expect((await ui.find({ type: 'Text', text: '▲ +713' })) !== undefined).toBe(isFull)
+  })
+}

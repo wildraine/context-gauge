@@ -44,12 +44,12 @@ const SVG_SPARK = '#888888'
 // 폭이 모자랄 때 항목을 빼는 단계: 값이 작을수록 먼저 빠진다
 const DROP = { spark: 1, delta: 1, bar: 2, contextPercent: 2, reset: 3 } as const
 const DETAIL_LEVELS = 4
-const CELL_PX = 8
-const ICON_CELLS = 2
+// 데스크톱 1칸 폭과 칸 테두리·여백은 앱 화면 실측 기준
+const CELL_PX = 9
 const DIVIDER_CELLS = 1
 const CLOSE_CELLS = 4
-const TERMINAL_LAYOUT = { innerGap: 1, outerGap: 2, paddingX: 0, frameCells: 0 }
-const PANEL_LAYOUT = { innerGap: 1, outerGap: 1, paddingX: 1, frameCells: 4 }
+const TERMINAL_LAYOUT = { innerGap: 1, outerGap: 2, paddingX: 0, frameCells: 0, iconCells: 2 }
+const PANEL_LAYOUT = { innerGap: 1, outerGap: 1, paddingX: 1, frameCells: 2, iconCells: 1 }
 
 const fill = atom({ plugin: 'context-gauge', key: 'fill' } as const, null)
 const history = atom({ plugin: 'context-gauge', key: 'history' } as const, [])
@@ -151,7 +151,7 @@ const barCells = (used: number, elapsed: number) => {
 
 type Part = { node: RenderChildren; cells: number; dropAt: number; hasDivider: boolean }
 type Pill = { key: string; tint: string; parts: Part[] }
-type Layout = { innerGap: number; outerGap: number; paddingX: number; frameCells: number }
+type Layout = { innerGap: number; outerGap: number; paddingX: number; frameCells: number; iconCells: number }
 
 const part = (node: RenderChildren, cells: number, dropAt = DETAIL_LEVELS, hasDivider = false): Part => ({
   node,
@@ -240,6 +240,7 @@ export const register: Register = on => {
     const { Box, Button, Text } = $.ui.resolve(e)
     const Svg = e.surface === 'terminal' ? undefined : $.ui.resolve(e).Svg
     const svgCells = (px: number) => Math.ceil(px / CELL_PX)
+    const layout = isTerminal ? TERMINAL_LAYOUT : PANEL_LAYOUT
 
     const color = colorOf(current.percent)
     const delta = points.length > 1 ? (points.at(-1) ?? 0) - (points.at(-2) ?? 0) : undefined
@@ -248,7 +249,7 @@ export const register: Register = on => {
       key: 'context',
       tint: TINT_BLUE,
       parts: [
-        part(<Text color={color}>{LEVEL_ICONS[levelOf(current.percent)]}</Text>, ICON_CELLS),
+        part(<Text color={color}>{LEVEL_ICONS[levelOf(current.percent)]}</Text>, layout.iconCells),
         part(<Text bold>{contextLabel}</Text>, contextLabel.length),
         part(<Text color={color}>{current.percent}%</Text>, `${current.percent}%`.length, DROP.contextPercent),
         Svg === undefined
@@ -298,7 +299,7 @@ export const register: Register = on => {
           key: style.kind,
           tint: style.tint,
           parts: [
-            part(<Text>{style.icon}</Text>, ICON_CELLS),
+            part(<Text>{style.icon}</Text>, layout.iconCells),
             part(<Text>{style.label}</Text>, style.label.length),
             bar,
             part(<Text bold>{usedLabel}</Text>, usedLabel.length),
@@ -311,7 +312,6 @@ export const register: Register = on => {
     })
 
     const pills = [contextPill, ...limitPills]
-    const layout = isTerminal ? TERMINAL_LAYOUT : PANEL_LAYOUT
     const detail = detailFor(pills, layout, e.props.bodyColumns)
     const divider = <Text dimColor>│</Text>
     const drawPill = (pill: Pill) => {
