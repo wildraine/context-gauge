@@ -202,16 +202,35 @@ test('terminal: 증감 추이를 문자 스파크라인으로 그린다', async 
   expect(await ui.find({ type: 'Text', text: '▁▂█' })).toBeDefined()
 })
 
-test('terminal: 한도 막대를 사용(█)·경과 시간(▒)·빈칸(░) 8칸으로 그린다', async ($, on) => {
-  setup(on)
-  // 38% 사용, 창 경과 56%: 사용 3칸, 경과 빗금 1칸, 빈칸 4칸
-  await measure($, 84_000, 42, [FIVE_HOUR])
-  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: BAND })
+// 화면에 그려진 Text 중 내용이 정확히 같은 것들
+const textsEqual = <T extends { text: string }>(nodes: T[], text: string) => nodes.filter(node => node.text === text)
 
-  const filled = await ui.find({ type: 'Text', text: '███' })
+test('terminal: 남는 폭이 없으면 한도 막대를 사용(█)·경과 시간(▒)·빈칸(░) 8칸으로 그린다', async ($, on) => {
+  setup(on)
+  // 컨텍스트 14칸 + 5h 27칸 + 칸 사이 4칸 + 닫기 4칸 = 49칸. 38% 사용, 창 경과 56%: 사용 3칸, 빗금 1칸, 빈칸 4칸
+  await measure($, 84_000, 42, [FIVE_HOUR])
+  const ui = await $.ui.mount({
+    plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: { ...BAND, bodyColumns: 49 },
+  })
+
+  const [filled] = textsEqual(await ui.findAll({ type: 'Text' }), '███')
   expect(filled?.props.color).toBe('green')
-  expect(await ui.find({ type: 'Text', text: '▒' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: '░░░░' })).toBeDefined()
+  expect(textsEqual(await ui.findAll({ type: 'Text' }), '▒')).toHaveLength(1)
+  expect(textsEqual(await ui.findAll({ type: 'Text' }), '░░░░')).toHaveLength(1)
+})
+
+test('terminal: 남는 폭만큼 한도 막대를 늘려 줄을 채운다', async ($, on) => {
+  setup(on)
+  // 전체 표시 90칸, 100칸이면 남는 10칸을 막대 2개에 5칸씩: 13칸 중 5h는 사용 5칸, 빗금 2칸, 빈칸 6칸
+  await measure($, 236_287, 50)
+  await measure($, 237_000, 50, [FIVE_HOUR, SEVEN_DAY])
+  const ui = await $.ui.mount({
+    plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: { ...BAND, bodyColumns: 100 },
+  })
+
+  expect(textsEqual(await ui.findAll({ type: 'Text' }), '█████')).toHaveLength(1)
+  expect(textsEqual(await ui.findAll({ type: 'Text' }), '▒▒')).toHaveLength(1)
+  expect(textsEqual(await ui.findAll({ type: 'Text' }), '░░░░░░')).toHaveLength(1)
 })
 
 test('desktop: 칸을 둥근 테두리로, 막대와 스파크라인을 SVG로 그린다', async ($, on) => {
@@ -287,5 +306,33 @@ for (const { columns, isFull } of [{ columns: 85, isFull: true }, { columns: 79,
     const spark = (await ui.findAll({ type: 'Svg' })).find(svg => svg.props.alt === 'Context history')
     expect(spark !== undefined).toBe(isFull)
     expect((await ui.find({ type: 'Text', text: '▲ +713' })) !== undefined).toBe(isFull)
+  })
+}
+
+test('desktop: 남는 폭만큼 한도 막대 SVG를 넓힌다', async ($, on) => {
+  setup(on)
+  // 전체 표시 80칸, 85칸이면 남는 5칸을 막대 2개에 2칸(18px)씩: 24px → 42px
+  await measure($, 236_287, 50)
+  await measure($, 237_000, 50, [FIVE_HOUR, SEVEN_DAY])
+  const ui = await $.ui.mount({
+    plugin: PLUGIN, surface: 'desktop', component: 'AbovePrompt', props: { ...BAND, bodyColumns: 85 },
+  })
+
+  const bar = (await ui.findAll({ type: 'Svg' })).find(svg => svg.props.alt === '5h 38%')
+  expect(bar?.props.width).toBe(42)
+  expect(bar?.props.source).toContain('width="42"')
+})
+
+for (const surface of SURFACES) {
+  test(`${surface}: 남는 자투리는 칸을 넓혀 채운다`, async ($, on) => {
+    setup(on)
+    await measure($, 84_000, 42, [FIVE_HOUR, SEVEN_DAY])
+    const ui = await $.ui.mount({ plugin: PLUGIN, surface, component: 'AbovePrompt', props: BAND })
+
+    for (const key of ['context', 'five_hour', 'seven_day']) {
+      const pill = await ui.find({ key })
+      expect(pill?.props.flexGrow).toBe(1)
+      expect(pill?.props.justifyContent).toBe('center')
+    }
   })
 }

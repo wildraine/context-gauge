@@ -124,29 +124,29 @@ const sparkSvg = (points: number[]) => {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${SVG_SPARK_HEIGHT}" viewBox="0 0 ${width} ${SVG_SPARK_HEIGHT}">${bars}</svg>`
 }
 
-const barSvg = (used: number, elapsed: number, color: string) => {
+const barSvg = (used: number, elapsed: number, color: string, width: number) => {
   const radius = SVG_BAR_HEIGHT / 2
-  const toWidth = (percent: number) => (clampPercent(percent) / FULL_PERCENT) * SVG_BAR_WIDTH
+  const toWidth = (percent: number) => (clampPercent(percent) / FULL_PERCENT) * width
 
   return (
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${SVG_BAR_WIDTH}" height="${SVG_BAR_HEIGHT}" viewBox="0 0 ${SVG_BAR_WIDTH} ${SVG_BAR_HEIGHT}">` +
-    `<defs><clipPath id="r"><rect width="${SVG_BAR_WIDTH}" height="${SVG_BAR_HEIGHT}" rx="${radius}"/></clipPath>` +
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${SVG_BAR_HEIGHT}" viewBox="0 0 ${width} ${SVG_BAR_HEIGHT}">` +
+    `<defs><clipPath id="r"><rect width="${width}" height="${SVG_BAR_HEIGHT}" rx="${radius}"/></clipPath>` +
     `<pattern id="h" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">` +
     `<rect width="1.5" height="3" fill="${SVG_HATCH}"/></pattern></defs>` +
     `<g clip-path="url(#r)">` +
-    `<rect width="${SVG_BAR_WIDTH}" height="${SVG_BAR_HEIGHT}" fill="${SVG_TRACK}"/>` +
+    `<rect width="${width}" height="${SVG_BAR_HEIGHT}" fill="${SVG_TRACK}"/>` +
     `<rect width="${toWidth(elapsed)}" height="${SVG_BAR_HEIGHT}" fill="url(#h)"/>` +
     `<rect width="${toWidth(used)}" height="${SVG_BAR_HEIGHT}" rx="${radius}" fill="${color}"/>` +
     `</g></svg>`
   )
 }
 
-const barCells = (used: number, elapsed: number) => {
-  const toCells = (percent: number) => Math.round((clampPercent(percent) / FULL_PERCENT) * BAR_CELLS)
+const barCells = (used: number, elapsed: number, total: number) => {
+  const toCells = (percent: number) => Math.round((clampPercent(percent) / FULL_PERCENT) * total)
   const filled = toCells(used)
   const hatched = Math.max(0, toCells(elapsed) - filled)
 
-  return { filled, hatched, empty: BAR_CELLS - filled - hatched }
+  return { filled, hatched, empty: total - filled - hatched }
 }
 
 type Part = { node: RenderChildren; cells: number; dropAt: number; hasDivider: boolean }
@@ -266,7 +266,8 @@ export const register: Register = on => {
       ],
     }
 
-    const limitPills = LIMITS.flatMap((style): Pill[] => {
+    // growCells: 줄을 꽉 채우도록 한도 막대마다 더하는 칸 수
+    const limitPills = (growCells: number) => LIMITS.flatMap((style): Pill[] => {
       const limit = readings.find(reading => reading.kind === style.kind)
       if (limit === undefined) return []
 
@@ -274,7 +275,9 @@ export const register: Register = on => {
       const elapsed = elapsedPercent(limit, style.windowMs, at)
       const barColor = colorOf(used)
       const remaining = remainingMs(limit, at)
-      const cells = barCells(used, elapsed)
+      const barTotal = BAR_CELLS + growCells
+      const barWidth = SVG_BAR_WIDTH + growCells * CELL_PX
+      const cells = barCells(used, elapsed, barTotal)
       const bar =
         Svg === undefined
           ? part(
@@ -283,12 +286,12 @@ export const register: Register = on => {
                 <Text dimColor>{'▒'.repeat(cells.hatched)}</Text>
                 <Text dimColor>{'░'.repeat(cells.empty)}</Text>
               </Box>,
-              BAR_CELLS,
+              barTotal,
               DROP.bar,
             )
           : part(
-              <Svg source={barSvg(used, elapsed, barColor)} alt={`${style.label} ${used}%`} width={SVG_BAR_WIDTH} height={SVG_BAR_HEIGHT} />,
-              svgCells(SVG_BAR_WIDTH),
+              <Svg source={barSvg(used, elapsed, barColor, barWidth)} alt={`${style.label} ${used}%`} width={barWidth} height={SVG_BAR_HEIGHT} />,
+              svgCells(barWidth),
               DROP.bar,
             )
       const usedLabel = `${Math.round(used)}%`
@@ -311,8 +314,12 @@ export const register: Register = on => {
       ]
     })
 
-    const pills = [contextPill, ...limitPills]
-    const detail = detailFor(pills, layout, e.props.bodyColumns)
+    const columns = e.props.bodyColumns
+    const compact = [contextPill, ...limitPills(0)]
+    const detail = detailFor(compact, layout, columns)
+    const barCount = detail < DROP.bar ? compact.length - 1 : 0
+    const spare = Math.max(0, columns - rowCells(compact, detail, layout))
+    const pills = barCount === 0 ? compact : [contextPill, ...limitPills(Math.floor(spare / barCount))]
     const divider = <Text dimColor>│</Text>
     const drawPill = (pill: Pill) => {
       const children = visibleParts(pill, detail).flatMap(({ node, hasDivider }) =>
@@ -320,7 +327,7 @@ export const register: Register = on => {
       )
 
       return isTerminal ? (
-        <Box key={pill.key} flexDirection="row" alignItems="center" flexShrink={0} gap={layout.innerGap}>
+        <Box key={pill.key} flexDirection="row" alignItems="center" justifyContent="center" flexGrow={1} flexShrink={0} gap={layout.innerGap}>
           {children}
         </Box>
       ) : (
@@ -328,6 +335,8 @@ export const register: Register = on => {
           key={pill.key}
           flexDirection="row"
           alignItems="center"
+          justifyContent="center"
+          flexGrow={1}
           flexShrink={0}
           gap={layout.innerGap}
           paddingX={layout.paddingX}
@@ -342,7 +351,13 @@ export const register: Register = on => {
     }
 
     return (
-      <Box flexDirection="row" alignItems="center" flexWrap="nowrap" overflow="hidden" gap={layout.outerGap}>
+      <Box
+        flexDirection="row"
+        alignItems="center"
+        flexWrap="nowrap"
+        overflow="hidden"
+        gap={layout.outerGap}
+      >
         {pills.map(drawPill)}
         <Button key="close" label="✕" onPress={() => update($, isHidden, () => true)} />
       </Box>

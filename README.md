@@ -9,7 +9,7 @@ A Claude Code mod that shows the session's usage above the prompt as a row of pi
 - **Context**: tokens in the context window, its percent, a sparkline of the last 8 measurements and the change since the previous one. The icon and color follow the percent: ☀ green below 50%, ⛅ yellow from 50%, ☁ orange from 60%, ⛈ red from 70%.
 - **5h / 7d**: how much of each rate-limit window is used and how long until it resets. The hatched part (`▒`) is how much of the window's time has passed: usage ahead of it means you are spending faster than an even pace.
 - The rate-limit pills appear only when the API reports rate limits (subscription plans).
-- The pills and `✕` stay on one line. When the line is too narrow, details drop in this order: sparkline and change, then the bars and context percent, then the reset times.
+- The pills and `✕` stay on one line and fill it: spare width goes to the 5h/7d bars, and the pills widen to take up the rest. When the line is too narrow, details drop in this order: sparkline and change, then the bars and context percent, then the reset times.
 - In the terminal the pills are text; in the desktop app, VS Code and mobile they are rounded boxes with SVG bars.
 - Updates after each response; the reset countdowns also tick every minute.
 - `✕` hides the gauge; `/context-gauge` shows or hides it again.
