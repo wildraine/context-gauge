@@ -248,14 +248,14 @@ test('desktop: 칸을 둥근 테두리로, 막대와 스파크라인을 SVG로 �
   expect(await ui.find({ text: /█/ })).toBeUndefined()
 })
 
-// 터미널 폭 계산 기준(▲ +713, 5h·7d): 전체 90칸, 스파크라인·증감 제외 76칸, 막대·컨텍스트 % 제외 54칸, 리셋 제외 35칸
+// 터미널 폭 계산 기준(▲ +713, 5h·7d): 전체 90칸, 스파크라인·증감 제외 76칸, 막대·컨텍스트 토큰 수 제외 55칸, 리셋 제외 36칸
 const RESPONSIVE = [
   { columns: 90, shown: ['▲ +713', '███', '↺ 2h12'], hidden: [] },
   { columns: 89, shown: ['███'], hidden: ['▲ +713'] },
-  { columns: 84, shown: ['███', '↺ 2h12', '50%'], hidden: ['▲ +713'] },
-  { columns: 64, shown: ['↺ 2h12', '38%'], hidden: ['▲ +713', '███', '50%'] },
-  { columns: 44, shown: ['38%', '33%'], hidden: ['↺ 2h12', '███'] },
-  { columns: 30, shown: ['237k', '38%', '33%'], hidden: ['↺ 2h12'] },
+  { columns: 84, shown: ['███', '↺ 2h12', '237k', '50%'], hidden: ['▲ +713'] },
+  { columns: 64, shown: ['↺ 2h12', '50%', '38%'], hidden: ['▲ +713', '███', '237k'] },
+  { columns: 44, shown: ['50%', '38%', '33%'], hidden: ['↺ 2h12', '███', '237k'] },
+  { columns: 30, shown: ['50%', '38%', '33%'], hidden: ['↺ 2h12', '237k'] },
 ] as const
 
 for (const { columns, shown, hidden } of RESPONSIVE) {

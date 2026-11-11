@@ -42,7 +42,7 @@ const SVG_HATCH = '#8888998c'
 const SVG_SPARK = '#888888'
 
 // 폭이 모자랄 때 항목을 빼는 단계: 값이 작을수록 먼저 빠진다
-const DROP = { spark: 1, delta: 1, bar: 2, contextPercent: 2, reset: 3 } as const
+const DROP = { spark: 1, delta: 1, bar: 2, contextTokens: 2, reset: 3 } as const
 const DETAIL_LEVELS = 4
 // 데스크톱 1칸 폭과 칸 테두리·여백은 앱 화면 실측 기준
 const CELL_PX = 9
@@ -250,8 +250,8 @@ export const register: Register = on => {
       tint: TINT_BLUE,
       parts: [
         part(<Text color={color}>{LEVEL_ICONS[levelOf(current.percent)]}</Text>, layout.iconCells),
-        part(<Text bold>{contextLabel}</Text>, contextLabel.length),
-        part(<Text color={color}>{current.percent}%</Text>, `${current.percent}%`.length, DROP.contextPercent),
+        part(<Text bold>{contextLabel}</Text>, contextLabel.length, DROP.contextTokens),
+        part(<Text color={color}>{current.percent}%</Text>, `${current.percent}%`.length),
         Svg === undefined
           ? part(<Text dimColor>{sparkText(points)}</Text>, points.length, DROP.spark, true)
           : part(
