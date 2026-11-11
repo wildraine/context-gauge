@@ -1,7 +1,7 @@
 {
   "name": "context-gauge",
   "version": "0.3.0",
-  "description": "Shows the session's context window usage above the prompt",
+  "description": "Shows the session's context window usage and 5h/7d rate limits above the prompt",
   "author": {
     "name": "WildRain"
   },

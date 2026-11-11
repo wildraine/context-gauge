@@ -1,6 +1,6 @@
 {
   "name": "context-gauge",
-  "description": "A Claude Code mod that shows the session's context window usage above the prompt",
+  "description": "A Claude Code mod that shows the session's context window usage and 5h/7d rate limits above the prompt",
   "owner": {
     "name": "WildRain"
   },
