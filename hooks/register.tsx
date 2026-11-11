@@ -27,7 +27,7 @@ const BORDER_ALPHA = '66'
 const BACKGROUND_ALPHA = '14'
 const LIMITS = [
   { kind: 'five_hour', label: '5h', icon: '⏱', windowMs: 5 * HOUR_MS, tint: '#3fa34d' },
-  { kind: 'seven_day', label: '7d', icon: '📅', windowMs: 7 * DAY_MS, tint: '#8a6fd1' },
+  { kind: 'seven_day', label: '7d', icon: '⏲', windowMs: 7 * DAY_MS, tint: '#8a6fd1' },
 ] as const
 
 const BAR_CELLS = 8
