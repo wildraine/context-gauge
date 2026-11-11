@@ -49,9 +49,7 @@ for (const surface of SURFACES) {
     await measure($, 84_000, 200_000, 42)
     const ui = await $.ui.mount({ plugin: PLUGIN, surface, component: 'AbovePrompt', props: BAND })
 
-    const [filled, empty, label] = await ui.findAll({ type: 'Text' })
-    expect(filled?.text).toBe('█'.repeat(8))
-    expect(empty?.text).toBe('░'.repeat(12))
+    const label = await ui.find({ type: 'Text', text: /Context/ })
     expect(label?.text.trim()).toBe('Context 42% · 84k / 200k')
     expect(await ui.find({ type: 'Button', key: 'close' })).toBeDefined()
     expect(label?.props.color).toBe('green')
@@ -64,8 +62,7 @@ for (const surface of SURFACES) {
       await measure($, percent * 2_000, 200_000, percent)
       const ui = await $.ui.mount({ plugin: PLUGIN, surface, component: 'AbovePrompt', props: BAND })
 
-      const [filled, , label] = await ui.findAll({ type: 'Text' })
-      expect(filled?.props.color).toBe(color)
+      const label = await ui.find({ type: 'Text', text: /Context/ })
       expect(label?.props.color).toBe(color)
     })
   }
@@ -108,3 +105,28 @@ for (const surface of SURFACES) {
     expect(hidden.text).toBe('Context gauge hidden.')
   })
 }
+
+test('terminal: 막대를 문자 20칸으로 그린다', async ($, on) => {
+  echoMeasure(on)
+  engineBand(on)
+  await measure($, 84_000, 200_000, 42)
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: BAND })
+
+  const [filled, empty] = await ui.findAll({ type: 'Text' })
+  expect(filled?.text).toBe('█'.repeat(8))
+  expect(filled?.props.color).toBe('green')
+  expect(empty?.text).toBe('░'.repeat(12))
+})
+
+test('desktop: 막대를 SVG로 그린다', async ($, on) => {
+  echoMeasure(on)
+  engineBand(on)
+  await measure($, 140_000, 200_000, 70)
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'desktop', component: 'AbovePrompt', props: BAND })
+
+  const svg = await ui.find({ type: 'Svg' })
+  expect(svg?.props.alt).toBe('Context 70%')
+  expect(svg?.props.source).toContain('width="84"')
+  expect(svg?.props.source).toContain('fill="red"')
+  expect(await ui.find({ text: /█/ })).toBeUndefined()
+})
