@@ -471,7 +471,7 @@ for (const surface of SURFACES) {
     expect(await ui.find({ type: 'Text', text: '☑' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: '2/4' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: '▸ 4-c1 명명 규칙 정리' })).toBeDefined()
-    const pills = (await ui.findAll({ type: 'Box' })).filter(box => box.props.flexGrow === 1)
+    const pills = (await ui.findAll({ type: 'Box' })).filter(box => box.props.flexGrow !== undefined)
     expect(pills.at(-1)?.key).toBe('checklist')
   })
 
@@ -641,4 +641,19 @@ test('terminal: 리셋까지 남은 시간 앞에 아이콘을 붙이지 않는�
   const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: BAND })
 
   expect(await ui.find({ type: 'Text', text: /↺/ })).toBeUndefined()
+})
+
+test('desktop: 체크리스트 칸은 다른 칸의 3분의 2 폭을 받는다', async ($, on) => {
+  setup(on)
+  serveChecklist(on, { text: '- [x] a\n- [x] b' })
+  await measure($, 84_000, 42, [FIVE_HOUR, SEVEN_DAY])
+  // 85칸에서 간격·버튼 2개·여유 14칸을 빼면 71칸, 비율 합 3⅔으로 나누면 한 몫 19.36칸: 다른 칸 19칸, 체크리스트 칸 12칸
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'desktop', component: 'AbovePrompt', props: { ...BAND, bodyColumns: 85 } })
+
+  for (const key of ['context', 'five_hour', 'seven_day']) {
+    expect((await ui.find({ key }))?.props.minWidth).toBe(19)
+  }
+  const checklist = await ui.find({ key: 'checklist' })
+  expect(checklist?.props.minWidth).toBe(12)
+  expect(checklist?.props.flexGrow).toBe(2 / 3)
 })

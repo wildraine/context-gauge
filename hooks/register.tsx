@@ -264,8 +264,13 @@ const pillCells = (pill: Pill, detail: number, layout: Layout) => {
 const reservedCells = (pillCount: number, buttonCount: number, layout: Layout) =>
   (pillCount + buttonCount - 1) * layout.outerGap + buttonCount * BUTTON_CELLS + layout.marginCells
 
-// 칸마다 똑같이 나눠 받는 폭
-const slotCells = (count: number, reserved: number, columns: number) => Math.floor((columns - reserved) / count)
+// 칸이 나눠 받는 폭의 비율: 체크리스트 칸은 다른 칸의 3분의 2, 나머지는 같다
+const PILL_WEIGHTS: Record<string, number> = { checklist: 2 / 3 }
+const weightOf = (pill: Pill) => PILL_WEIGHTS[pill.key] ?? 1
+const totalWeight = (pills: Pill[]) => pills.reduce((sum, pill) => sum + weightOf(pill), 0)
+
+// 비율대로 나눠 받는 칸 폭
+const slotCells = (pill: Pill, unit: number) => Math.floor(unit * weightOf(pill))
 
 const rowCells = (pills: Pill[], detail: number, layout: Layout, reserved: number) =>
   pills.reduce((sum, pill) => sum + pillCells(pill, detail, layout), reserved)
@@ -508,22 +513,30 @@ export const register: Register = (on, options) => {
     const pillsWith = (grow: Grow) => [contextPill, ...limitPills(grow), ...checklistPills(grow)]
     const compact = pillsWith(() => 0)
     const reserved = reservedCells(compact.length, progress === null ? 1 : 2, layout)
-    const slot = slotCells(compact.length, reserved, columns)
-    // 같은 폭으로 그려도 내용 폭대로 그릴 때만큼 보이면 같은 폭으로, 아니면 정보를 먼저 살려 내용 폭대로 그린다
-    const equalDetail = detailFor(detail => compact.every(pill => pillCells(pill, detail, layout) <= slot))
+    const unit = (columns - reserved) / totalWeight(compact)
+    const slotOf = (key: string) => {
+      const pill = compact.find(candidate => candidate.key === key)
+
+      return pill === undefined ? undefined : slotCells(pill, unit)
+    }
+    // 비율대로 나눈 폭으로 그려도 내용 폭대로 그릴 때만큼 보이면 그 폭으로, 아니면 정보를 먼저 살려 내용 폭대로 그린다
+    const equalDetail = detailFor(detail => compact.every(pill => pillCells(pill, detail, layout) <= slotCells(pill, unit)))
     const rowDetail = detailFor(detail => rowCells(compact, detail, layout, reserved) <= columns)
     const isEqual = equalDetail <= rowDetail
     const detail = isEqual ? equalDetail : rowDetail
-    // 막대가 있는 칸(컨텍스트 칸 말고 모두)이 남는 폭을 막대로 받는다
-    const rowGrow = Math.floor(Math.max(0, columns - rowCells(compact, detail, layout, reserved)) / Math.max(1, compact.length - 1))
+    // 막대가 있는 칸(컨텍스트 칸 말고 모두)이 남는 폭을 비율대로 막대로 받는다
+    const spare = Math.max(0, columns - rowCells(compact, detail, layout, reserved))
+    const barWeight = totalWeight(compact.filter(pill => pill.key !== contextPill.key))
     const growOf: Grow = key => {
       const pill = compact.find(candidate => candidate.key === key)
       if (pill === undefined || detail >= DROP.bar) return 0
 
-      return isEqual ? Math.max(0, Math.floor(slot - pillCells(pill, detail, layout))) : rowGrow
+      return isEqual
+        ? Math.max(0, Math.floor(slotCells(pill, unit) - pillCells(pill, detail, layout)))
+        : Math.floor((spare * weightOf(pill)) / Math.max(1, barWeight))
     }
     const pills = pillsWith(growOf)
-    const minWidth = isEqual ? slot : undefined
+    const minWidthOf = (pill: Pill) => (isEqual ? slotOf(pill.key) : undefined)
     const divider = <Text size={PILL_TEXT_SIZE} dimColor>│</Text>
     const drawPill = (pill: Pill) => {
       const children = visibleParts(pill, detail).flatMap(({ node, hasDivider }) =>
@@ -531,7 +544,7 @@ export const register: Register = (on, options) => {
       )
 
       return isTerminal ? (
-        <Box key={pill.key} flexDirection="row" alignItems="center" justifyContent="center" flexGrow={1} flexShrink={0} minWidth={minWidth} gap={layout.innerGap}>
+        <Box key={pill.key} flexDirection="row" alignItems="center" justifyContent="center" flexGrow={weightOf(pill)} flexShrink={0} minWidth={minWidthOf(pill)} gap={layout.innerGap}>
           {children}
         </Box>
       ) : (
@@ -540,9 +553,9 @@ export const register: Register = (on, options) => {
           flexDirection="row"
           alignItems="center"
           justifyContent="center"
-          flexGrow={1}
+          flexGrow={weightOf(pill)}
           flexShrink={0}
-          minWidth={minWidth}
+          minWidth={minWidthOf(pill)}
           gap={layout.innerGap}
           paddingX={layout.paddingX}
           paddingY={0}
