@@ -3,7 +3,7 @@
 A Claude Code mod that shows the session's usage above the prompt as a row of pills.
 
 ```
-☀ 237k ▁▃▅▃▁ 42%   ⏱ 5h ███▒░░░░ 38% │ ↺ 2h12   ⏲ 7d ███░░░░░ 33% │ ↺ 1d23h   ☑ 12/30 ███░░░░░ │ ▸ 4-c1 Naming rules   [☰] [✕]
+☀ 237k ▁▃▅▃▁ 42%   ⏱ 5h ███▒░░░░ 38% │ 2h12   ⏲ 7d ███░░░░░ 33% │ 1d23h   ☑ 12/30 ███░░░░░ │ ▸ 4-c1 Naming rules   [☰] [✕]
 ```
 
 - **Context**: tokens in the context window, a sparkline of the last 8 measurements and its percent. The icon and color follow the percent: ☀ green below 50%, ⛅ yellow from 50%, ☁ orange from 60%, ⛈ red from 70%.

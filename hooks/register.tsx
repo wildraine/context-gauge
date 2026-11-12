@@ -442,7 +442,7 @@ export const register: Register = (on, options) => {
               DROP.bar,
             )
       const usedLabel = `${Math.round(used)}%`
-      const resetLabel = remaining === undefined ? undefined : `↺ ${durationLabel(remaining)}`
+      const resetLabel = remaining === undefined ? undefined : durationLabel(remaining)
 
       return [
         {

@@ -141,10 +141,10 @@ for (const surface of SURFACES) {
 
     expect(await ui.find({ key: 'five_hour' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: '38%' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: '↺ 2h12' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '2h12' })).toBeDefined()
     expect(await ui.find({ key: 'seven_day' })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: '33%' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: '↺ 1d23h' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '1d23h' })).toBeDefined()
   })
 
   test(`${surface}: 한도 정보가 없으면 한도 칸을 그리지 않는다`, async ($, on) => {
@@ -164,7 +164,7 @@ for (const surface of SURFACES) {
     await clock.advance(2 * MINUTE)
     await ui.redraw()
 
-    expect(await ui.find({ type: 'Text', text: '↺ 2h10' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '2h10' })).toBeDefined()
   })
 
   test(`${surface}: 설문이 떠 있으면 양보한다`, async ($, on) => {
@@ -214,10 +214,10 @@ const textsEqual = <T extends { text: string }>(nodes: T[], text: string) => nod
 
 test('terminal: 한도 막대를 사용(█)·경과 시간(▒)·빈칸(░)으로 그린다', async ($, on) => {
   setup(on)
-  // 62칸이면 칸마다 27칸. 5h 칸은 막대 최소 4칸으로 23칸이라 막대 8칸: 38% 사용, 창 경과 56%면 사용 3칸, 빗금 1칸, 빈칸 4칸
+  // 58칸이면 칸마다 25칸. 5h 칸은 막대 최소 4칸으로 21칸이라 막대 8칸: 38% 사용, 창 경과 56%면 사용 3칸, 빗금 1칸, 빈칸 4칸
   await measure($, 84_000, 42, [FIVE_HOUR])
   const ui = await $.ui.mount({
-    plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: { ...BAND, bodyColumns: 62 },
+    plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: { ...BAND, bodyColumns: 58 },
   })
 
   const [filled] = textsEqual(await ui.findAll({ type: 'Text' }), '███')
@@ -228,8 +228,8 @@ test('terminal: 한도 막대를 사용(█)·경과 시간(▒)·빈칸(░)으
 
 test('terminal: 칸 폭을 같게 맞추고 남는 만큼 칸마다 막대를 늘린다', async ($, on) => {
   setup(on)
-  // 100칸이면 칸마다 (100 - 칸 사이 6 - 닫기 4) / 3 = 30칸. 막대 최소 4칸 기준 5h는 23칸이라 막대 11칸(사용 4·빗금 2·빈칸 5),
-  // 7d는 24칸이라 막대 10칸(사용 3·빗금 4·빈칸 3)
+  // 100칸이면 칸마다 (100 - 칸 사이 6 - 닫기 4) / 3 = 30칸. 막대 최소 4칸 기준 5h는 21칸이라 막대 13칸(사용 5·빗금 2·빈칸 6),
+  // 7d는 22칸이라 막대 12칸(사용 4·빗금 5·빈칸 3)
   await measure($, 236_287, 50)
   await measure($, 237_000, 50, [FIVE_HOUR, SEVEN_DAY])
   const ui = await $.ui.mount({
@@ -238,7 +238,7 @@ test('terminal: 칸 폭을 같게 맞추고 남는 만큼 칸마다 막대를 �
 
   for (const key of ['context', 'five_hour', 'seven_day']) expect((await ui.find({ key }))?.props.minWidth).toBe(30)
   const texts = await ui.findAll({ type: 'Text' })
-  for (const bar of ['████', '▒▒', '░░░░░', '███', '▒▒▒▒', '░░░']) expect(textsEqual(texts, bar)).toHaveLength(1)
+  for (const bar of ['█████', '▒▒', '░░░░░░', '████', '▒▒▒▒▒', '░░░']) expect(textsEqual(texts, bar)).toHaveLength(1)
 })
 
 test('desktop: 칸을 둥근 테두리로, 막대와 스파크라인을 SVG로 그린다', async ($, on) => {
@@ -257,22 +257,22 @@ test('desktop: 칸을 둥근 테두리로, 막대와 스파크라인을 SVG로 �
 })
 
 // 터미널 폭 계산 기준(스파크라인 2칸, 5h·7d, 막대 최소 4칸, 칸 사이·닫기 10칸). 같은 폭이면 가장 넓은 칸 × 3, 내용 폭이면 칸 합계가 든다.
-// 같은 폭: 전체 표시와 스파크라인 제외 모두 82칸(가장 넓은 7d 24칸), 리셋·토큰 수 제외 52칸, 막대 제외 37칸
-// 내용 폭: 전체 표시 71칸, 스파크라인 제외 68칸, 리셋·토큰 수 제외 44칸, 막대 제외 34칸
+// 같은 폭: 전체 표시와 스파크라인 제외 모두 76칸(가장 넓은 7d 22칸), 리셋·토큰 수 제외 52칸, 막대 제외 37칸
+// 내용 폭: 전체 표시 67칸, 스파크라인 제외 64칸, 리셋·토큰 수 제외 44칸, 막대 제외 34칸
 // 더 많이 보이는 쪽을 고르고, 같으면 같은 폭으로 그린다
 const BAR = /^█+$/
 const SPARK = '▁█'
 const RESPONSIVE = [
-  { columns: 82, shown: [SPARK, BAR, '↺ 2h12', '237k'], hidden: [], isEqual: true },
-  { columns: 81, shown: [SPARK, BAR, '↺ 2h12', '237k'], hidden: [], isEqual: false },
-  { columns: 71, shown: [SPARK, BAR, '↺ 2h12', '237k'], hidden: [], isEqual: false },
-  { columns: 70, shown: [BAR, '↺ 2h12', '237k'], hidden: [SPARK], isEqual: false },
-  { columns: 68, shown: [BAR, '↺ 2h12', '237k'], hidden: [SPARK], isEqual: false },
-  { columns: 67, shown: [BAR, '50%', '38%'], hidden: [SPARK, '↺ 2h12', '237k'], isEqual: true },
-  { columns: 51, shown: [BAR, '50%', '38%'], hidden: [SPARK, '↺ 2h12', '237k'], isEqual: false },
-  { columns: 44, shown: [BAR, '50%', '38%'], hidden: [SPARK, '↺ 2h12', '237k'], isEqual: false },
-  { columns: 43, shown: ['50%', '38%', '33%'], hidden: [BAR, '↺ 2h12', '237k'], isEqual: true },
-  { columns: 30, shown: ['50%', '38%', '33%'], hidden: [BAR, '↺ 2h12', '237k'], isEqual: true },
+  { columns: 76, shown: [SPARK, BAR, '2h12', '237k'], hidden: [], isEqual: true },
+  { columns: 75, shown: [SPARK, BAR, '2h12', '237k'], hidden: [], isEqual: false },
+  { columns: 67, shown: [SPARK, BAR, '2h12', '237k'], hidden: [], isEqual: false },
+  { columns: 66, shown: [BAR, '2h12', '237k'], hidden: [SPARK], isEqual: false },
+  { columns: 64, shown: [BAR, '2h12', '237k'], hidden: [SPARK], isEqual: false },
+  { columns: 63, shown: [BAR, '50%', '38%'], hidden: [SPARK, '2h12', '237k'], isEqual: true },
+  { columns: 51, shown: [BAR, '50%', '38%'], hidden: [SPARK, '2h12', '237k'], isEqual: false },
+  { columns: 44, shown: [BAR, '50%', '38%'], hidden: [SPARK, '2h12', '237k'], isEqual: false },
+  { columns: 43, shown: ['50%', '38%', '33%'], hidden: [BAR, '2h12', '237k'], isEqual: true },
+  { columns: 30, shown: ['50%', '38%', '33%'], hidden: [BAR, '2h12', '237k'], isEqual: true },
 ] as const
 
 for (const { columns, shown, hidden, isEqual } of RESPONSIVE) {
@@ -312,8 +312,8 @@ test('desktop: 칸의 위아래 여백을 두지 않는다', async ($, on) => {
 })
 
 // 데스크톱 폭 계산 기준(5h·7d, 글자 0.92칸, 칸 안 간격 0.5칸, 간격·닫기·여유 8칸):
-// 내용 폭으로 전체 표시는 11.86 + 18.54 + 19.46 + 8 = 57.86칸이라 58칸부터. 앱에서 실측한 밴드 폭은 85칸
-for (const { columns, isFull } of [{ columns: 85, isFull: true }, { columns: 58, isFull: true }, { columns: 57, isFull: false }] as const) {
+// 내용 폭으로 전체 표시는 11.86 + 16.7 + 17.62 + 8 = 54.18칸이라 55칸부터. 앱에서 실측한 밴드 폭은 85칸
+for (const { columns, isFull } of [{ columns: 85, isFull: true }, { columns: 55, isFull: true }, { columns: 54, isFull: false }] as const) {
   test(`desktop: ${columns}칸이면 스파크라인을 ${isFull ? '그린다' : '뺀다'}`, async ($, on) => {
     setup(on)
     await measure($, 236_287, 50)
@@ -329,7 +329,7 @@ for (const { columns, isFull } of [{ columns: 85, isFull: true }, { columns: 58,
 
 test('desktop: 칸 폭을 같게 맞추고 남는 만큼 한도 막대 SVG를 넓힌다', async ($, on) => {
   setup(on)
-  // 85칸이면 칸마다 (85 - 간격·닫기·여유 8) / 3 = 25칸. 막대 최소 12px 기준 5h는 18.54칸이라 6칸(54px)을 더해 12px → 66px
+  // 85칸이면 칸마다 (85 - 간격·닫기·여유 8) / 3 = 25칸. 막대 최소 12px 기준 5h는 16.7칸이라 8칸(72px)을 더해 12px → 84px
   await measure($, 236_287, 50)
   await measure($, 237_000, 50, [FIVE_HOUR, SEVEN_DAY])
   const ui = await $.ui.mount({
@@ -337,8 +337,8 @@ test('desktop: 칸 폭을 같게 맞추고 남는 만큼 한도 막대 SVG를 �
   })
 
   const bar = (await ui.findAll({ type: 'Svg' })).find(svg => svg.props.alt === '5h 38%')
-  expect(bar?.props.width).toBe(66)
-  expect(bar?.props.source).toContain('width="66"')
+  expect(bar?.props.width).toBe(84)
+  expect(bar?.props.source).toContain('width="84"')
   for (const key of ['context', 'five_hour', 'seven_day']) expect((await ui.find({ key }))?.props.minWidth).toBe(25)
 })
 
@@ -633,4 +633,12 @@ test('terminal: 컨텍스트 칸은 아이콘·토큰 수·스파크라인·퍼�
 
   const texts = (await ui.findAll({ type: 'Text' })).map(node => node.text)
   expect(texts.slice(0, 4)).toEqual(['⛅', '237k', '▁█', '50%'])
+})
+
+test('terminal: 리셋까지 남은 시간 앞에 아이콘을 붙이지 않는다', async ($, on) => {
+  setup(on)
+  await measure($, 84_000, 42, [FIVE_HOUR])
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: BAND })
+
+  expect(await ui.find({ type: 'Text', text: /↺/ })).toBeUndefined()
 })
