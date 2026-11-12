@@ -101,27 +101,10 @@ for (const surface of SURFACES) {
     })
   }
 
-  test(`${surface}: 직전 측정 대비 증감을 표시한다`, async ($, on) => {
+  test(`${surface}: 컨텍스트 칸에 증감은 표시하지 않는다`, async ($, on) => {
     setup(on)
     await measure($, 236_287, 50)
     await measure($, 237_000, 50)
-    const ui = await mount($)
-
-    expect(await ui.find({ type: 'Text', text: '▲ +713' })).toBeDefined()
-  })
-
-  test(`${surface}: 컨텍스트가 줄면 감소로 표시한다`, async ($, on) => {
-    setup(on)
-    await measure($, 100_000, 50)
-    await measure($, 40_000, 20)
-    const ui = await mount($)
-
-    expect(await ui.find({ type: 'Text', text: '▼ -60k' })).toBeDefined()
-  })
-
-  test(`${surface}: 첫 측정에는 증감을 표시하지 않는다`, async ($, on) => {
-    setup(on)
-    await measure($, 84_000, 42)
     const ui = await mount($)
 
     expect(await ui.find({ type: 'Text', text: /[▲▼]/ })).toBeUndefined()
@@ -229,12 +212,12 @@ test('terminal: 증감 추이를 문자 스파크라인으로 그린다', async 
 // 화면에 그려진 Text 중 내용이 정확히 같은 것들
 const textsEqual = <T extends { text: string }>(nodes: T[], text: string) => nodes.filter(node => node.text === text)
 
-test('terminal: 남는 폭이 없으면 한도 막대를 사용(█)·경과 시간(▒)·빈칸(░) 8칸으로 그린다', async ($, on) => {
+test('terminal: 한도 막대를 사용(█)·경과 시간(▒)·빈칸(░)으로 그린다', async ($, on) => {
   setup(on)
-  // 컨텍스트 14칸 + 5h 27칸 + 칸 사이 4칸 + 닫기 4칸 = 49칸. 38% 사용, 창 경과 56%: 사용 3칸, 빗금 1칸, 빈칸 4칸
+  // 62칸이면 칸마다 27칸. 5h 칸은 막대 최소 4칸으로 23칸이라 막대 8칸: 38% 사용, 창 경과 56%면 사용 3칸, 빗금 1칸, 빈칸 4칸
   await measure($, 84_000, 42, [FIVE_HOUR])
   const ui = await $.ui.mount({
-    plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: { ...BAND, bodyColumns: 49 },
+    plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: { ...BAND, bodyColumns: 62 },
   })
 
   const [filled] = textsEqual(await ui.findAll({ type: 'Text' }), '███')
@@ -243,18 +226,19 @@ test('terminal: 남는 폭이 없으면 한도 막대를 사용(█)·경과 시
   expect(textsEqual(await ui.findAll({ type: 'Text' }), '░░░░')).toHaveLength(1)
 })
 
-test('terminal: 남는 폭만큼 한도 막대를 늘려 줄을 채운다', async ($, on) => {
+test('terminal: 칸 폭을 같게 맞추고 남는 만큼 칸마다 막대를 늘린다', async ($, on) => {
   setup(on)
-  // 전체 표시 90칸, 100칸이면 남는 10칸을 막대 2개에 5칸씩: 13칸 중 5h는 사용 5칸, 빗금 2칸, 빈칸 6칸
+  // 100칸이면 칸마다 (100 - 칸 사이 6 - 닫기 4) / 3 = 30칸. 막대 최소 4칸 기준 5h는 23칸이라 막대 11칸(사용 4·빗금 2·빈칸 5),
+  // 7d는 24칸이라 막대 10칸(사용 3·빗금 4·빈칸 3)
   await measure($, 236_287, 50)
   await measure($, 237_000, 50, [FIVE_HOUR, SEVEN_DAY])
   const ui = await $.ui.mount({
     plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: { ...BAND, bodyColumns: 100 },
   })
 
-  expect(textsEqual(await ui.findAll({ type: 'Text' }), '█████')).toHaveLength(1)
-  expect(textsEqual(await ui.findAll({ type: 'Text' }), '▒▒')).toHaveLength(1)
-  expect(textsEqual(await ui.findAll({ type: 'Text' }), '░░░░░░')).toHaveLength(1)
+  for (const key of ['context', 'five_hour', 'seven_day']) expect((await ui.find({ key }))?.props.minWidth).toBe(30)
+  const texts = await ui.findAll({ type: 'Text' })
+  for (const bar of ['████', '▒▒', '░░░░░', '███', '▒▒▒▒', '░░░']) expect(textsEqual(texts, bar)).toHaveLength(1)
 })
 
 test('desktop: 칸을 둥근 테두리로, 막대와 스파크라인을 SVG로 그린다', async ($, on) => {
@@ -272,17 +256,26 @@ test('desktop: 칸을 둥근 테두리로, 막대와 스파크라인을 SVG로 �
   expect(await ui.find({ text: /█/ })).toBeUndefined()
 })
 
-// 터미널 폭 계산 기준(▲ +713, 5h·7d): 전체 90칸, 스파크라인·증감 제외 76칸, 막대·컨텍스트 토큰 수 제외 55칸, 리셋 제외 36칸
+// 터미널 폭 계산 기준(스파크라인 2칸, 5h·7d, 막대 최소 4칸, 칸 사이·닫기 10칸). 같은 폭이면 가장 넓은 칸 × 3, 내용 폭이면 칸 합계가 든다.
+// 같은 폭: 전체 표시와 스파크라인 제외 모두 82칸(가장 넓은 7d 24칸), 리셋·토큰 수 제외 52칸, 막대 제외 37칸
+// 내용 폭: 전체 표시 71칸, 스파크라인 제외 68칸, 리셋·토큰 수 제외 44칸, 막대 제외 34칸
+// 더 많이 보이는 쪽을 고르고, 같으면 같은 폭으로 그린다
+const BAR = /^█+$/
+const SPARK = '▁█'
 const RESPONSIVE = [
-  { columns: 90, shown: ['▲ +713', '███', '↺ 2h12'], hidden: [] },
-  { columns: 89, shown: ['███'], hidden: ['▲ +713'] },
-  { columns: 84, shown: ['███', '↺ 2h12', '237k', '50%'], hidden: ['▲ +713'] },
-  { columns: 64, shown: ['↺ 2h12', '50%', '38%'], hidden: ['▲ +713', '███', '237k'] },
-  { columns: 44, shown: ['50%', '38%', '33%'], hidden: ['↺ 2h12', '███', '237k'] },
-  { columns: 30, shown: ['50%', '38%', '33%'], hidden: ['↺ 2h12', '237k'] },
+  { columns: 82, shown: [SPARK, BAR, '↺ 2h12', '237k'], hidden: [], isEqual: true },
+  { columns: 81, shown: [SPARK, BAR, '↺ 2h12', '237k'], hidden: [], isEqual: false },
+  { columns: 71, shown: [SPARK, BAR, '↺ 2h12', '237k'], hidden: [], isEqual: false },
+  { columns: 70, shown: [BAR, '↺ 2h12', '237k'], hidden: [SPARK], isEqual: false },
+  { columns: 68, shown: [BAR, '↺ 2h12', '237k'], hidden: [SPARK], isEqual: false },
+  { columns: 67, shown: [BAR, '50%', '38%'], hidden: [SPARK, '↺ 2h12', '237k'], isEqual: true },
+  { columns: 51, shown: [BAR, '50%', '38%'], hidden: [SPARK, '↺ 2h12', '237k'], isEqual: false },
+  { columns: 44, shown: [BAR, '50%', '38%'], hidden: [SPARK, '↺ 2h12', '237k'], isEqual: false },
+  { columns: 43, shown: ['50%', '38%', '33%'], hidden: [BAR, '↺ 2h12', '237k'], isEqual: true },
+  { columns: 30, shown: ['50%', '38%', '33%'], hidden: [BAR, '↺ 2h12', '237k'], isEqual: true },
 ] as const
 
-for (const { columns, shown, hidden } of RESPONSIVE) {
+for (const { columns, shown, hidden, isEqual } of RESPONSIVE) {
   test(`terminal: ${columns}칸이면 덜 중요한 항목부터 빼고 한 줄로 그린다`, async ($, on) => {
     setup(on)
     await measure($, 236_287, 50)
@@ -294,6 +287,7 @@ for (const { columns, shown, hidden } of RESPONSIVE) {
     for (const text of shown) expect(await ui.find({ type: 'Text', text })).toBeDefined()
     for (const text of hidden) expect(await ui.find({ type: 'Text', text })).toBeUndefined()
     expect(await ui.find({ type: 'Button', key: 'close' })).toBeDefined()
+    expect((await ui.find({ key: 'context' }))?.props.minWidth !== undefined).toBe(isEqual)
   })
 }
 
@@ -317,9 +311,10 @@ test('desktop: 칸의 위아래 여백을 두지 않는다', async ($, on) => {
   expect((await ui.find({ key: 'context' }))?.props.paddingY).toBe(0)
 })
 
-// 데스크톱 폭 계산 기준(▲ +713, 5h·7d): 전체 80칸, 스파크라인·증감 제외 67칸. 앱에서 실측한 밴드 폭은 85칸
-for (const { columns, isFull } of [{ columns: 85, isFull: true }, { columns: 79, isFull: false }] as const) {
-  test(`desktop: ${columns}칸이면 스파크라인과 증감을 ${isFull ? '그린다' : '뺀다'}`, async ($, on) => {
+// 데스크톱 폭 계산 기준(5h·7d, 글자 0.92칸, 칸 안 간격 0.5칸, 간격·닫기·여유 8칸):
+// 내용 폭으로 전체 표시는 11.86 + 18.54 + 19.46 + 8 = 57.86칸이라 58칸부터. 앱에서 실측한 밴드 폭은 85칸
+for (const { columns, isFull } of [{ columns: 85, isFull: true }, { columns: 58, isFull: true }, { columns: 57, isFull: false }] as const) {
+  test(`desktop: ${columns}칸이면 스파크라인을 ${isFull ? '그린다' : '뺀다'}`, async ($, on) => {
     setup(on)
     await measure($, 236_287, 50)
     await measure($, 237_000, 50, [FIVE_HOUR, SEVEN_DAY])
@@ -329,13 +324,12 @@ for (const { columns, isFull } of [{ columns: 85, isFull: true }, { columns: 79,
 
     const spark = (await ui.findAll({ type: 'Svg' })).find(svg => svg.props.alt === 'Context history')
     expect(spark !== undefined).toBe(isFull)
-    expect((await ui.find({ type: 'Text', text: '▲ +713' })) !== undefined).toBe(isFull)
   })
 }
 
-test('desktop: 남는 폭만큼 한도 막대 SVG를 넓힌다', async ($, on) => {
+test('desktop: 칸 폭을 같게 맞추고 남는 만큼 한도 막대 SVG를 넓힌다', async ($, on) => {
   setup(on)
-  // 전체 표시 80칸, 85칸이면 남는 5칸을 막대 2개에 2칸(18px)씩: 24px → 42px
+  // 85칸이면 칸마다 (85 - 간격·닫기·여유 8) / 3 = 25칸. 막대 최소 12px 기준 5h는 18.54칸이라 6칸(54px)을 더해 12px → 66px
   await measure($, 236_287, 50)
   await measure($, 237_000, 50, [FIVE_HOUR, SEVEN_DAY])
   const ui = await $.ui.mount({
@@ -343,8 +337,9 @@ test('desktop: 남는 폭만큼 한도 막대 SVG를 넓힌다', async ($, on) =
   })
 
   const bar = (await ui.findAll({ type: 'Svg' })).find(svg => svg.props.alt === '5h 38%')
-  expect(bar?.props.width).toBe(42)
-  expect(bar?.props.source).toContain('width="42"')
+  expect(bar?.props.width).toBe(66)
+  expect(bar?.props.source).toContain('width="66"')
+  for (const key of ['context', 'five_hour', 'seven_day']) expect((await ui.find({ key }))?.props.minWidth).toBe(25)
 })
 
 for (const surface of SURFACES) {
@@ -446,4 +441,196 @@ test('인수인계 턴이 중단되면 끝나지 않았다고 알린다', HANDOF
   await $.turn.complete({ answer: '', durationMs: 1, isAborted: true, turnId: 'handoff', reason: 'aborted' })
 
   expect(notices).toEqual(['The handoff document was not finished.'])
+})
+
+// 체크리스트: 엔진 자리에서 작업 폴더의 checklist.md를 돌려준다(없으면 실제 파일 시스템으로 넘겨 읽기 실패)
+const serveChecklist = (on: On, file: { text: string | null }) =>
+  on('fs.read', ($, e, next) =>
+    e.path.endsWith('/checklist.md') && file.text !== null ? { value: file.text } : next(e))
+
+const CHECKLIST = [
+  '# 작업',
+  '- [x] 4-b3 명명 도우미',
+  '- [X] 4-b4 재적재 메뉴 제거',
+  '  - [ ] 4-c1 명명 규칙 정리',
+  '* [ ] 4-c2 검증 화면',
+  '- 체크박스 아닌 줄',
+].join('\n')
+
+for (const surface of SURFACES) {
+  const mount = ($: Engine, props = BAND) =>
+    $.ui.mount({ plugin: PLUGIN, surface, component: 'AbovePrompt', props })
+
+  test(`${surface}: checklist.md가 있으면 완료 수와 다음 항목을 맨 오른쪽에 표시한다`, async ($, on) => {
+    setup(on)
+    serveChecklist(on, { text: CHECKLIST })
+    await measure($, 84_000, 42, [FIVE_HOUR, SEVEN_DAY])
+    const ui = await mount($)
+
+    expect(await ui.find({ key: 'checklist' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '☑' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '2/4' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '▸ 4-c1 명명 규칙 정리' })).toBeDefined()
+    const pills = (await ui.findAll({ type: 'Box' })).filter(box => box.props.flexGrow === 1)
+    expect(pills.at(-1)?.key).toBe('checklist')
+  })
+
+  test(`${surface}: checklist.md가 없으면 체크리스트 칸을 그리지 않는다`, async ($, on) => {
+    setup(on)
+    serveChecklist(on, { text: null })
+    await measure($, 84_000, 42)
+    const ui = await mount($)
+
+    expect(await ui.find({ key: 'context' })).toBeDefined()
+    expect(await ui.find({ key: 'checklist' })).toBeUndefined()
+  })
+
+  test(`${surface}: 모두 끝나면 완료 수를 초록으로 표시하고 다음 항목은 뺀다`, async ($, on) => {
+    setup(on)
+    serveChecklist(on, { text: '- [x] a\n- [x] b' })
+    await measure($, 84_000, 42)
+    const ui = await mount($)
+
+    expect((await ui.find({ type: 'Text', text: '2/2' }))?.props.color).toBe('green')
+    expect(await ui.find({ type: 'Text', text: /^▸/ })).toBeUndefined()
+  })
+
+  test(`${surface}: 1분마다 checklist.md를 다시 읽는다`, async ($, on) => {
+    const clock = setup(on)
+    const file = { text: CHECKLIST as string | null }
+    serveChecklist(on, file)
+    await measure($, 84_000, 42)
+    const ui = await mount($)
+
+    file.text = CHECKLIST.replace('- [ ] 4-c1', '- [x] 4-c1')
+    await clock.advance(MINUTE)
+    await ui.redraw()
+
+    expect(await ui.find({ type: 'Text', text: '3/4' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: '▸ 4-c2 검증 화면' })).toBeDefined()
+  })
+}
+
+test('terminal: 긴 다음 항목은 말줄임표로 줄인다', async ($, on) => {
+  setup(on)
+  serveChecklist(on, { text: '- [ ] 아주 긴 작업 이름이 들어가서 칸을 넘치는 항목입니다' })
+  await measure($, 84_000, 42)
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: BAND })
+
+  const next = await ui.find({ type: 'Text', text: /^▸/ })
+  expect(next?.text.endsWith('…')).toBe(true)
+  expect((next?.text.length ?? 0) < 20).toBe(true)
+})
+
+test('terminal: 좁으면 다음 항목, 막대 순으로 빼고 완료 수는 남긴다', async ($, on) => {
+  setup(on)
+  serveChecklist(on, { text: CHECKLIST })
+  await measure($, 84_000, 42, [FIVE_HOUR, SEVEN_DAY])
+  const narrow = await $.ui.mount({
+    plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: { ...BAND, bodyColumns: 40 },
+  })
+
+  expect(await narrow.find({ type: 'Text', text: '2/4' })).toBeDefined()
+  expect(await narrow.find({ type: 'Text', text: /^▸/ })).toBeUndefined()
+  expect(await narrow.find({ type: 'Text', text: /░/ })).toBeUndefined()
+})
+
+// 체크리스트 창: 엔진 자리에서 창 열기·닫기를 기록한다
+const recordPane = (on: On) => {
+  const events: string[] = []
+  let isOpen = false
+  on('ui.open', ($, e) => {
+    events.push(`open:${e.id}`)
+    isOpen = true
+
+    return { value: { isPlaced: true } as const }
+  })
+  on('ui.close', ($, e) => {
+    events.push(`close:${e.id}`)
+    isOpen = false
+
+    return { value: undefined }
+  })
+  on('ui.panes', () => ({
+    value: isOpen ? [{ id: 'checklist', title: 'Checklist', isShown: true, isFocused: false, isPlaced: true }] : [],
+  }))
+
+  return events
+}
+
+const PANE = {
+  title: 'Checklist',
+  isFocused: false,
+  bodyColumns: 60,
+  placement: 'dock',
+  scroll: { offset: 0, bodyRows: 20 },
+  view: {},
+} as const
+
+for (const surface of SURFACES) {
+  test(`${surface}: 체크리스트 완료 수를 누르면 창을 열고, 다시 누르면 닫는다`, async ($, on) => {
+    setup(on)
+    serveChecklist(on, { text: CHECKLIST })
+    const events = recordPane(on)
+    await measure($, 84_000, 42)
+    const ui = await $.ui.mount({ plugin: PLUGIN, surface, component: 'AbovePrompt', props: BAND })
+
+    await ui.press({ key: 'checklist-open' })
+    await ui.press({ key: 'checklist-open' })
+
+    expect(events).toEqual(['open:checklist', 'close:checklist'])
+  })
+
+  test(`${surface}: 체크리스트 창에 제목, 완료(✓)·미완료(○) 항목을 들여쓰기대로 그린다`, async ($, on) => {
+    setup(on)
+    serveChecklist(on, { text: CHECKLIST })
+    await measure($, 84_000, 42)
+    const pane = await $.ui.mount({ plugin: PLUGIN, surface, component: 'Pane', props: PANE, requestId: 'checklist' })
+
+    expect((await pane.find({ type: 'Text', text: '작업' }))?.props.bold).toBe(true)
+    expect((await pane.find({ type: 'Text', text: '✓ 4-b3 명명 도우미' }))?.props.dimColor).toBe(true)
+    const next = await pane.find({ type: 'Text', text: '  ○ 4-c1 명명 규칙 정리' })
+    expect(next?.props.bold).toBe(true)
+    expect((await pane.find({ type: 'Text', text: '○ 4-c2 검증 화면' }))?.props.bold).not.toBe(true)
+    expect(await pane.find({ type: 'Text', text: /체크박스 아닌 줄/ })).toBeUndefined()
+  })
+
+  test(`${surface}: checklist.md가 없으면 창에 안내를 표시한다`, async ($, on) => {
+    setup(on)
+    serveChecklist(on, { text: null })
+    await measure($, 84_000, 42)
+    const pane = await $.ui.mount({ plugin: PLUGIN, surface, component: 'Pane', props: PANE, requestId: 'checklist' })
+
+    expect(await pane.find({ type: 'Text', text: /No checklist\.md/ })).toBeDefined()
+  })
+}
+
+test('desktop: 칸 글자를 가장 작은 크기로 그린다', async ($, on) => {
+  setup(on)
+  await measure($, 84_000, 42, [FIVE_HOUR])
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'desktop', component: 'AbovePrompt', props: BAND })
+
+  for (const text of ['84k', '42%', '38%']) expect((await ui.find({ type: 'Text', text }))?.props.size).toBe('caption')
+})
+
+for (const surface of SURFACES) {
+  test(`${surface}: checklist.md가 있으면 닫기 버튼 옆에 체크리스트 창 버튼을 둔다`, async ($, on) => {
+    setup(on)
+    serveChecklist(on, { text: CHECKLIST })
+    await measure($, 84_000, 42)
+    const ui = await $.ui.mount({ plugin: PLUGIN, surface, component: 'AbovePrompt', props: BAND })
+
+    const buttons = await ui.findAll({ type: 'Button' })
+    expect(buttons.map(button => button.key)).toEqual(['checklist-open', 'close'])
+  })
+}
+
+test('terminal: 컨텍스트 칸은 아이콘·토큰 수·스파크라인·퍼센트 순서로 그린다', async ($, on) => {
+  setup(on)
+  await measure($, 236_287, 50)
+  await measure($, 237_000, 50)
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: BAND })
+
+  const texts = (await ui.findAll({ type: 'Text' })).map(node => node.text)
+  expect(texts.slice(0, 4)).toEqual(['⛅', '237k', '▁█', '50%'])
 })

@@ -1,7 +1,7 @@
 {
   "name": "context-gauge",
-  "version": "0.4.1",
-  "description": "Shows the session's context window usage and 5h/7d rate limits above the prompt",
+  "version": "0.5.0",
+  "description": "Shows the session's context window usage, 5h/7d rate limits and checklist.md progress above the prompt",
   "author": {
     "name": "WildRain"
   },
